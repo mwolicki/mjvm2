@@ -4,17 +4,20 @@ module Domain
 type  Magic = private { Magic:uint32 }
 let magic value = if value <> 0xCAFEBABEu then failwithf "Invalid magic number (expected = 0xCAFEBABE, got = %X)!" value else { Magic = value }
 
+[<Struct>]
+type RefInfo = { ClassIndex:uint16; NameAndTypeIndex:uint16 }
+
 type ConstantType =
 | CUtf8
-| CInteger
-| CFloat
-| CLong
-| CDouble
+| CInteger of int
+| CFloat of float32
+| CLong of int64
+| CDouble of float
 | CClass
 | CString
-| CFieldref
-| CMethodref
-| CInterfaceMethodref
+| CFieldref of RefInfo
+| CMethodref of RefInfo
+| CInterfaceMethodref of RefInfo
 | CNameAndType
 | CMethodHandle
 | CMethodType
@@ -22,6 +25,7 @@ type ConstantType =
 | CInvokeDynamic
 | CModule
 | CPackage
+| Unknown of uint8
 
 type ClassFile = {
     Magic : Magic
