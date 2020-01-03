@@ -7,14 +7,17 @@ let magic value = if value <> 0xCAFEBABEu then failwithf "Invalid magic number (
 [<Struct>]
 type RefInfo = { ClassIndex:uint16; NameAndTypeIndex:uint16 }
 
+[<Struct>]
+type Utf8Index = Utf8Index of uint16 
+
 type ConstantType =
-| CUtf8
+| CUtf8 of string
 | CInteger of int
 | CFloat of float32
 | CLong of int64
 | CDouble of float
-| CClass
-| CString
+| CClass of Utf8Index
+| CString of Utf8Index
 | CFieldref of RefInfo
 | CMethodref of RefInfo
 | CInterfaceMethodref of RefInfo

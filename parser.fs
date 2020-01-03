@@ -88,17 +88,26 @@ let parseHeader = ((u4 .=>. u2) .=>. u2) =~ fun ((magicNumber, minor), major) ->
 let inline isU1Val v = isVal u1 v
 
 let pRefInfo = u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {ClassIndex = classIndex; NameAndTypeIndex = nameAndTypeIndex} )
-
+let pCUtf8 = 
+    let pUtf8 : Parse<String> = fun  state ->
+        option {
+            let! sizeResult = u2 state 
+            let size = sizeResult.Result |> int
+            return! res (sizeResult.State ++ size) (System.Text.Encoding.UTF8.GetString (sizeResult.State.Slice size))
+        }
+    isU1Val 1uy =>. pUtf8 =~ CUtf8
 let pCInt = isU1Val 3uy =>. i4 =~ CInteger
 let pCFloat = isU1Val 4uy =>. pFloat32 =~ CFloat
 let pCLong = isU1Val 5uy =>. i8 =~ CLong
 let pCDouble = isU1Val 6uy =>. pFloat =~ CDouble
+let pCClass = isU1Val 7uy =>. u2 =~ (Utf8Index >> CClass)
+let pCString = isU1Val 8uy =>. u2 =~ (Utf8Index >> CString)
 let pCFieldref = isU1Val 9uy =>. pRefInfo =~ CFieldref
 let pCMethodType = isU1Val 10uy =>. pRefInfo =~ CMethodref
 let pCInterfaceMethodref = isU1Val 11uy =>. pRefInfo =~ CInterfaceMethodref
 
 //we could make this a lot faster by not cheking always all possible combinations
-let pConstType : Parse<ConstantType> = choice [pCInt; pCFloat; pCLong; pCDouble; pCFieldref; pCMethodType; pCInterfaceMethodref]
+let pConstType : Parse<ConstantType> = choice [pCUtf8; pCInt; pCFloat; pCLong; pCDouble; pCClass; pCString; pCFieldref; pCMethodType; pCInterfaceMethodref]
 (*
 let toConstType = function
 | 1uy -> CUtf8
