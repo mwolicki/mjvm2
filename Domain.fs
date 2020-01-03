@@ -7,8 +7,32 @@ let magic value = if value <> 0xCAFEBABEu then failwithf "Invalid magic number (
 [<Struct>]
 type RefInfo = { ClassIndex:uint16; NameAndTypeIndex:uint16 }
 
+
 [<Struct>]
 type Utf8Index = Utf8Index of uint16 
+
+[<Struct>]
+type NameAndType = { NameIndex : uint16; DescriptorIndex : Utf8Index }
+
+type RefKind = 
+| GetField
+| GetStatic
+| PutField
+| PutStatic
+| InvokeVirtual
+| InvokeStatic
+| InvokeSpecial
+| NewInvokeSpecial
+| InvokeInterface
+
+[<Struct>]
+type MethodHandle = { ReferenceKind : RefKind; ReferenceIndex : uint16 }
+
+[<Struct>]
+type DynamicInfo = {
+    BootstrapMethodAttrIndex : uint16
+    NameAndTypeIndex : uint16
+}
 
 type ConstantType =
 | CUtf8 of string
@@ -21,13 +45,13 @@ type ConstantType =
 | CFieldref of RefInfo
 | CMethodref of RefInfo
 | CInterfaceMethodref of RefInfo
-| CNameAndType
-| CMethodHandle
-| CMethodType
-| CDynamic
-| CInvokeDynamic
-| CModule
-| CPackage
+| CNameAndType of NameAndType
+| CMethodHandle of MethodHandle
+| CMethodType of Utf8Index
+| CDynamic of DynamicInfo
+| CInvokeDynamic of DynamicInfo
+| CModule of Utf8Index
+| CPackage of Utf8Index
 | Unknown of uint8
 
 type ClassFile = {

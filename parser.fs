@@ -9,9 +9,11 @@ open System.IO
 open System.Buffers.Binary
 
 [<Struct>]
+[<StructuredFormatDisplay("State = {ReadOnlyMemory}; Pos = {Pos} ")>]
 type State = { Data : byte array; Pos : int }
 with 
     member s.Span = ReadOnlySpan(s.Data, s.Pos, s.Data.Length - s.Pos)
+    member s.ReadOnlyMemory = ReadOnlyMemory(s.Data, s.Pos, s.Data.Length - s.Pos).ToArray()
     member s.Slice len = ReadOnlySpan(s.Data, s.Pos, len)
     static member inline(++) (x:State, i) = { x with Pos = x.Pos + i}
 
@@ -56,6 +58,8 @@ let inline (.=>.) (a:Parse<'a>) (b:Parse<'b>) : Parse<('a*'b)> =
 
 let inline res state result = Some { State = state; Result = result }
 
+let inline pSingleton v state = res state v
+
 let pFloat (ms:State) = res (ms ++ 8) (BitConverter.ToDouble (ms.Slice 8))
 let pFloat32 (ms:State) = res (ms ++ 4) (BitConverter.ToSingle (ms.Slice 4))
 let u8 (ms:State) = res (ms ++ 8) (BinaryPrimitives.ReadUInt64BigEndian (ms.Slice 8))
@@ -87,7 +91,7 @@ let parseHeader = ((u4 .=>. u2) .=>. u2) =~ fun ((magicNumber, minor), major) ->
 
 let inline isU1Val v = isVal u1 v
 
-let pRefInfo = u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {ClassIndex = classIndex; NameAndTypeIndex = nameAndTypeIndex} )
+
 let pCUtf8 = 
     let pUtf8 : Parse<String> = fun  state ->
         option {
@@ -102,50 +106,53 @@ let pCLong = isU1Val 5uy =>. i8 =~ CLong
 let pCDouble = isU1Val 6uy =>. pFloat =~ CDouble
 let pCClass = isU1Val 7uy =>. u2 =~ (Utf8Index >> CClass)
 let pCString = isU1Val 8uy =>. u2 =~ (Utf8Index >> CString)
+let pRefInfo = u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {ClassIndex = classIndex; NameAndTypeIndex = nameAndTypeIndex} )
 let pCFieldref = isU1Val 9uy =>. pRefInfo =~ CFieldref
 let pCMethodType = isU1Val 10uy =>. pRefInfo =~ CMethodref
 let pCInterfaceMethodref = isU1Val 11uy =>. pRefInfo =~ CInterfaceMethodref
+let pCNameAndType = isU1Val 12uy =>. u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {NameIndex = classIndex; DescriptorIndex = Utf8Index nameAndTypeIndex} |> CNameAndType)
+
+let pRefKind =
+    let inline p v c = isU1Val v =>. pSingleton c
+    choice [ p 1uy GetField; p 2uy GetStatic; p 3uy PutField; p 4uy PutStatic
+             p 5uy InvokeVirtual; p 6uy InvokeStatic; p 7uy InvokeSpecial
+             p 8uy NewInvokeSpecial; p 9uy InvokeInterface ]
+
+let pCMethodHandle = isU1Val 15uy =>. pRefKind .=>. u2 =~ (fun (refKind, refIndex) -> {ReferenceKind = refKind; ReferenceIndex = refIndex } |> CMethodHandle)
+
+let pCDynamic = isU1Val 17uy =>. u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CDynamic)
+let pCInvokeDynamic = isU1Val 18uy =>. u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CInvokeDynamic)
+
+let pCModule = isU1Val 19uy =>. u2 =~ (Utf8Index >> CModule)
+let pCPackage = isU1Val 20uy =>. u2 =~ (Utf8Index >> CPackage)
 
 //we could make this a lot faster by not cheking always all possible combinations
-let pConstType : Parse<ConstantType> = choice [pCUtf8; pCInt; pCFloat; pCLong; pCDouble; pCClass; pCString; pCFieldref; pCMethodType; pCInterfaceMethodref]
-(*
-let toConstType = function
-| 1uy -> CUtf8
-| 3uy -> CInteger
-| 4uy -> CFloat
-| 5uy -> CLong
-| 6uy -> CDouble
-| 7uy -> CClass
-| 8uy -> CString
-| 9uy -> CFieldref
-| 10uy -> CMethodref
-| 11uy -> CInterfaceMethodref
-| 12uy -> CNameAndType
-| 15uy -> CMethodHandle
-| 16uy -> CMethodType
-| 17uy -> CDynamic
-| 18uy -> CInvokeDynamic
-| 19uy -> CModule
-| 20uy -> CPackage
-| unknownConstType -> failwithf "Unknown const type - number %d" unknownConstType
-*)
+let pConstType : Parse<ConstantType> = choice [pCUtf8; pCInt; pCFloat; 
+    pCLong; pCDouble; pCClass; pCString; pCFieldref; pCMethodType; 
+    pCInterfaceMethodref; pCNameAndType; pCMethodHandle;
+    pCDynamic; pCInvokeDynamic; pCModule; pCPackage; isU1Val 0uy =~ Unknown]
+
 
 let parseConsts = 
     let rec loop state count xs : Result<_ list> option =
+        printfn "pos = %d..." count
         if count = 0us then 
             res state (xs |> List.rev)
         else 
             option {
                 let! p = pConstType state
-                printfn "%A" p.Result 
-                return! loop p.State (count - 1us) (p.Result :: xs) } |> Option.defaultWith(fun () -> 
+                printfn "pos = %d; val = %A" count p.Result 
+                let count = 
+                    match p.Result with
+                    | CDouble _ | CLong _ -> count - 2us
+                    | _ -> count - 1us
+                return! loop p.State (count) (p.Result :: xs) } |> Option.defaultWith(fun () -> 
                     (u1 =~ (Unknown >> List.singleton)) state |> Option.get) |> Some
 
     fun x -> 
         option {
             let! constCount = u2 x
+            printfn "Count %A" constCount.Result
             return! loop constCount.State constCount.Result [] }
 
 
-let x =  readFile "/Users/kevin/_projects/java/HelloWorld.class" |> (parseHeader =>. parseConsts)
-printfn "result = %A" x 
