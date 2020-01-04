@@ -149,12 +149,47 @@ module Lower =
     }
 
 module Higher =
+    [<Struct>]
+    type ClassName = ClassName of string
+
+    [<RequireQualifiedAccess>]
+    type FieldDescriptor = 
+    /// B	byte	signed byte
+    | Byte
+    /// C	char	Unicode character code point in the Basic Multilingual Plane, encoded with UTF-16
+    | Char
+    /// D	double	double-precision floating-point value
+    | Double
+    /// F	float	single-precision floating-point value
+    | Float
+    /// I	int	integer
+    | Integer
+    /// J	long	long integer
+    | Long
+    /// L ClassName ;	reference	an instance of class ClassName
+    | Reference of ClassName
+    /// S	short	signed short
+    | Short
+    /// Z	boolean	true or false
+    | Boolean
+    /// [	reference	one array dimension
+    | Array of FieldDescriptor
+
+
+    type FieldInfo = {
+        AccessFlags : AccessFlag
+        Name : string
+        Descriptor : FieldDescriptor
+        /// Each value of the attributes table must be an attribute_info structure (§4.7).
+        //AttributeInfo : AttributeInfo list
+     }
 
     type ClassFile = {
         AccessFlags : AccessFlag
         ThisClass : string
         SuperClass : string option
         Interfaces : string list
+        Fields : FieldInfo list
     }
 
 
