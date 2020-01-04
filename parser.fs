@@ -88,7 +88,6 @@ let indexedChoice (indexParser:'a Parse) (parsers:('a * Parse<_>) list) =
     fun state ->
         option {
             let! index = indexParser state
-
             return! 
                 match parsersMap.TryGetValue index.Result with
                 | true, parser -> parser index.State
@@ -121,36 +120,34 @@ let pCUtf8 =
             let size = sizeResult.Result |> int
             return! res (sizeResult.State ++ size) (System.Text.Encoding.UTF8.GetString (sizeResult.State.Slice size))
         }
-    isU1Val 1uy =>. pUtf8 =~ CUtf8
-let pCInt = isU1Val 3uy =>. i4 =~ CInteger
-let pCFloat = isU1Val 4uy =>. pFloat32 =~ CFloat
-let pCLong = isU1Val 5uy =>. i8 =~ CLong
-let pCDouble = isU1Val 6uy =>. pFloat =~ CDouble
-let pCClass = isU1Val 7uy =>. u2 =~ (Utf8Index >> CClass)
-let pCString = isU1Val 8uy =>. u2 =~ (Utf8Index >> CString)
-let pCFieldref = isU1Val 9uy =>. pRefInfo =~ CFieldref
-let pCMethodType = isU1Val 10uy =>. pRefInfo =~ CMethodref
-let pCInterfaceMethodref = isU1Val 11uy =>. pRefInfo =~ CInterfaceMethodref
-let pCNameAndType = isU1Val 12uy =>. u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {NameIndex = classIndex; DescriptorIndex = Utf8Index nameAndTypeIndex} |> CNameAndType)
+    1uy , pUtf8 =~ CUtf8
+let pCInt = 3uy, i4 =~ CInteger
+let pCFloat = 4uy, pFloat32 =~ CFloat
+let pCLong = 5uy, i8 =~ CLong
+let pCDouble = 6uy, pFloat =~ CDouble
+let pCClass = 7uy, u2 =~ (Utf8Index >> CClass)
+let pCString = 8uy, u2 =~ (Utf8Index >> CString)
+let pCFieldref = 9uy, pRefInfo =~ CFieldref
+let pCMethodType = 10uy, pRefInfo =~ CMethodref
+let pCInterfaceMethodref = 11uy, pRefInfo =~ CInterfaceMethodref
+let pCNameAndType = 12uy, u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {NameIndex = classIndex; DescriptorIndex = Utf8Index nameAndTypeIndex} |> CNameAndType)
 
-let pCMethodHandle = isU1Val 15uy =>. pRefKind .=>. u2 =~ (fun (refKind, refIndex) -> {ReferenceKind = refKind; ReferenceIndex = refIndex } |> CMethodHandle)
+let pCMethodHandle = 15uy, pRefKind .=>. u2 =~ (fun (refKind, refIndex) -> {ReferenceKind = refKind; ReferenceIndex = refIndex } |> CMethodHandle)
 
-let pCDynamic = isU1Val 17uy =>. u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CDynamic)
-let pCInvokeDynamic = isU1Val 18uy =>. u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CInvokeDynamic)
+let pCDynamic = 17uy, u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CDynamic)
+let pCInvokeDynamic = 18uy, u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CInvokeDynamic)
 
-let pCModule = isU1Val 19uy =>. u2 =~ (Utf8Index >> CModule)
-let pCPackage = isU1Val 20uy =>. u2 =~ (Utf8Index >> CPackage)
+let pCModule = 19uy, u2 =~ (Utf8Index >> CModule)
+let pCPackage = 20uy, u2 =~ (Utf8Index >> CPackage)
 
-//we could make this a lot faster by not cheking always all possible combinations
-let pConstType : Parse<ConstantType> = choice [pCUtf8; pCInt; pCFloat; 
+let pConstType : Parse<ConstantType> = indexedChoice u1 [pCUtf8; pCInt; pCFloat; 
     pCLong; pCDouble; pCClass; pCString; pCFieldref; pCMethodType; 
     pCInterfaceMethodref; pCNameAndType; pCMethodHandle;
-    pCDynamic; pCInvokeDynamic; pCModule; pCPackage; isU1Val 0uy =~ Unknown]
-
+    pCDynamic; pCInvokeDynamic; pCModule; pCPackage]
 
 let parseConsts = 
     let rec loop state count index xs : Result<IReadOnlyDictionary<_, _>> option =
-        if count = 0us then 
+        if count <= 0us then 
             res state (xs |> Map.ofList |> Dictionary :> _) 
         else 
             option {
@@ -165,6 +162,6 @@ let parseConsts =
     fun x -> 
         option {
             let! constCount = u2 x
-            return! loop constCount.State constCount.Result 1us [] }
+            return! loop constCount.State (constCount.Result - 1us) 1us [] }
 
 let parseHeader = ((u4 .=>. u2) .=>. u2 .=>. parseConsts) =~ fun (((magicNumber, minor), major), consts) -> { Magic = magic magicNumber; MinorVersion = minor; MajorVersion = major; ConstantPool = consts }
