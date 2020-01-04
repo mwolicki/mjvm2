@@ -175,13 +175,17 @@ module Higher =
     /// [	reference	one array dimension
     | Array of FieldDescriptor
 
+     type AttributeInfo = {
+        Name : string
+        Info : ReadOnlyMemory<byte>
+    }
+
 
     type FieldInfo = {
         AccessFlags : AccessFlag
         Name : string
         Descriptor : FieldDescriptor
-        /// Each value of the attributes table must be an attribute_info structure (§4.7).
-        //AttributeInfo : AttributeInfo list
+        Attributes : AttributeInfo list
      }
 
     type ClassFile = {

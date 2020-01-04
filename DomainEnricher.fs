@@ -39,6 +39,7 @@ let transform (classFile : Lower.ClassFile) : ClassFile =
             FieldInfo.AccessFlags = fieldInfo.AccessFlags
             Name = getUtf8 classFile fieldInfo.NameIndex
             Descriptor = getUtf8 classFile fieldInfo.DescriptorIndex |> fun s -> let span = s.AsSpan () in getFieldDescriptor (span)
+            Attributes = fieldInfo.AttributeInfo |> List.map (fun x-> { Name = getUtf8 classFile x.AttributeNameIndex; Info = x.Info })
         }
     {
         AccessFlags = classFile.AccessFlags
