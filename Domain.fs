@@ -1,4 +1,5 @@
 module Domain
+open System
 open System.Collections.Generic
 
 [<Struct>]
@@ -83,6 +84,24 @@ type Version = {
     MajorVersion : uint16
  }
 
+ type AttributeInfo = {
+    /// For all attributes, the attribute_name_index item must be a valid unsigned 16-bit index into the constant pool of the class. The constant_pool entry at attribute_name_index must be a CONSTANT_Utf8_info structure (§4.4.7) representing the name of the attribute.
+    AttributeNameIndex : Utf8Index
+    /// The value of the attribute_length item indicates the length of the subsequent information in bytes. The length does not include the initial six bytes that contain the attribute_name_index and attribute_length items.
+    Info : ReadOnlyMemory<byte>
+}
+
+ type FieldInfo = {
+    /// The value of the access_flags item is a mask of flags used to denote access permission to and properties of this field. The interpretation of each flag, when set, is specified in Table 4.5-A.
+    AccessFlags : AccessFlag
+    /// The value of the name_index item must be a valid index into the constant_pool table. The constant_pool entry at that index must be a CONSTANT_Utf8_info structure (§4.4.7) which represents a valid unqualified name denoting a field (§4.2.2).
+    NameIndex : Utf8Index
+    /// The value of the descriptor_index item must be a valid index into the constant_pool table. The constant_pool entry at that index must be a CONSTANT_Utf8_info structure (§4.4.7) which represents a valid field descriptor (§4.3.2).
+    DescriptorIndex : Utf8Index
+    /// Each value of the attributes table must be an attribute_info structure (§4.7).
+    AttributeInfo : AttributeInfo list
+ }
+
 type ClassFile = {
     /// The magic item supplies the magic number identifying the class file format; it has the value 0xCAFEBABE.
     Magic : Magic
@@ -100,13 +119,15 @@ type ClassFile = {
     /// 
     /// For an interface, the value of the super_class item must always be a valid index into the constant_pool table. The constant_pool entry at that index must be a CONSTANT_Class_info structure representing the class Object.
     SuperClass : ClassInfo option
+    /// Each value in the interfaces array must be a valid index into the constant_pool table. The constant_pool entry at each value of interfaces[i], where 0 ≤ i < interfaces_count, must be a CONSTANT_Class_info structure representing an interface that is a direct superinterface of this class or interface type, in the left-to-right order given in the source for the type.
+    Interfaces : ClassInfo list
+    /// Each value in the fields table must be a field_info structure (§4.5) giving a complete description of a field in this class or interface. The fields table includes only those fields that are declared by this class or interface. It does not include items representing fields that are inherited from superclasses or superinterfaces.
+    Fields : FieldInfo list
     (*
-    u2             interfaces_count;
-    u2             interfaces[interfaces_count];
-    u2             fields_count;
+    fields_count;
     field_info     fields[fields_count];
-    u2             methods_count;
+    methods_count;
     method_info    methods[methods_count];
-    u2             attributes_count;
+    attributes_count;
     attribute_info attributes[attributes_count];*)
 }

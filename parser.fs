@@ -10,11 +10,12 @@ open System.Buffers.Binary
 open System.Collections.Generic
 
 [<Struct>]
-[<StructuredFormatDisplay("State = {ReadOnlyMemory}; Pos = {Pos} ")>]
+[<StructuredFormatDisplay("State = {AsArray}; Pos = {Pos} ")>]
 type State = { Data : byte array; Pos : int }
 with 
     member s.Span = ReadOnlySpan(s.Data, s.Pos, s.Data.Length - s.Pos)
-    member s.ReadOnlyMemory = ReadOnlyMemory(s.Data, s.Pos, s.Data.Length - s.Pos).ToArray()
+    member s.AsArray = s.Data.[s.Pos..]
+    member s.ReadOnlyMemorySlice len = ReadOnlyMemory(s.Data, s.Pos, len)
     member s.Slice len = ReadOnlySpan(s.Data, s.Pos, len)
     static member inline(++) (x:State, i) = { x with Pos = x.Pos + i}
 
@@ -170,12 +171,47 @@ let pVersion = u2 .=>. u2 =~ fun (minor, major) -> { MinorVersion = minor; Major
 let pThisClass = u2 =~ ClassInfo
 let pSuperClass = u2 =~ function | 0us -> None | ci -> ClassInfo ci |> Some
 
+let inline parseLoop f = 
+    let rec loop state count xs : Result<_ list> option =
+        if count <= 0us then 
+            res state (xs |> List.rev) 
+        else 
+            option {
+                let! { Result = result; State = state } = f state
+                return! loop state (count - 1us) (result :: xs) }
+
+    fun x -> 
+        option {
+            let! { Result = count; State = state } = u2 x
+            return! loop state count [] }
+
+
+let pInterfaces = parseLoop (u2 =~ ClassInfo)
+
+let pAttributeInfo = 
+    let parseAttributeBytes state =
+        option {
+            let! { Result = size; State = state } = u4 state
+            let size = int size
+
+            return! res (state ++ size) (state.ReadOnlyMemorySlice size) } 
+    u2 .=>. parseAttributeBytes =~ fun (index, bytes) -> { AttributeNameIndex = Utf8Index index; Info = bytes }
+
+let pFields = parseLoop (pAccessFlags .=>. u2 .=>. u2 .=>. (parseLoop pAttributeInfo) =~
+                    fun (((accessFlags, nameIndex), descriptorIndex), attricuteInfo) ->
+                    { FieldInfo.AccessFlags = accessFlags
+                      NameIndex = Utf8Index nameIndex
+                      DescriptorIndex = Utf8Index descriptorIndex
+                      AttributeInfo = attricuteInfo })
+
 let parseHeader = 
-    (u4 .=>. pVersion .=>. parseConsts .=>. pAccessFlags .=>. pThisClass .=>. pSuperClass) 
-    =~ fun (((((magicNumber, version), consts), accessFlags), thisClass) , superClass) -> 
-        { Magic = magic magicNumber; 
-          Version = version;
-          ConstantPool = consts;
-          AccessFlags = accessFlags;
+    (u4 .=>. pVersion .=>. parseConsts .=>. pAccessFlags .=>. pThisClass .=>. pSuperClass .=>. pInterfaces .=>. pFields) 
+    =~ fun (((((((magicNumber, version), consts), accessFlags), thisClass) , superClass), interfaces), fields) -> 
+        { Magic = magic magicNumber;
+          Version = version
+          ConstantPool = consts
+          AccessFlags = accessFlags
           ThisClass = thisClass
-          SuperClass = superClass }
+          SuperClass = superClass
+          Interfaces = interfaces
+          Fields = fields }
