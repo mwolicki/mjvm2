@@ -164,7 +164,18 @@ let parseConsts =
             let! constCount = u2 x
             return! loop constCount.State (constCount.Result - 1us) 1us [] }
 
-let pAccessFlags =
-    u2 =~ (int32 >> enum<AccessFlag>)
+let pAccessFlags = u2 =~ (int32 >> enum<AccessFlag>)
+let pVersion = u2 .=>. u2 =~ fun (minor, major) -> { MinorVersion = minor; MajorVersion = major }
 
-let parseHeader = ((u4 .=>. u2) .=>. u2 .=>. parseConsts .=>. pAccessFlags) =~ fun ((((magicNumber, minor), major), consts), accessFlags) -> { Magic = magic magicNumber; MinorVersion = minor; MajorVersion = major; ConstantPool = consts; AccessFlags = accessFlags }
+let pThisClass = u2 =~ ClassInfo
+let pSuperClass = u2 =~ function | 0us -> None | ci -> ClassInfo ci |> Some
+
+let parseHeader = 
+    (u4 .=>. pVersion .=>. parseConsts .=>. pAccessFlags .=>. pThisClass .=>. pSuperClass) 
+    =~ fun (((((magicNumber, version), consts), accessFlags), thisClass) , superClass) -> 
+        { Magic = magic magicNumber; 
+          Version = version;
+          ConstantPool = consts;
+          AccessFlags = accessFlags;
+          ThisClass = thisClass
+          SuperClass = superClass }
