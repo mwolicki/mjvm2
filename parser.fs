@@ -16,7 +16,11 @@ with
     member s.Span = ReadOnlySpan(s.Data, s.Pos, s.Data.Length - s.Pos)
     member s.AsArray = s.Data.[s.Pos..]
     member s.ReadOnlyMemorySlice len = ReadOnlyMemory(s.Data, s.Pos, len)
+    #if FABLE_COMPILER
+    member s.Slice len = s.Data.[s.Pos..len]
+    #else
     member s.Slice len = ReadOnlySpan(s.Data, s.Pos, len)
+    #endif
     static member inline(++) (x:State, i) = { x with Pos = x.Pos + i}
 
 type OptionBuilder () =
@@ -61,9 +65,13 @@ let inline (.=>.) (a:Parse<'a>) (b:Parse<'b>) : Parse<('a*'b)> =
 let inline res state result = Some { State = state; Result = result }
 
 let inline pSingleton v state = res state v
-
+#if FABLE_COMPILER
+let pFloat (ms:State) = res (ms ++ 8) (BitConverter.ToDouble (ms.Slice 8, 8))
+let pFloat32 (ms:State) = res (ms ++ 4) (BitConverter.ToSingle (ms.Slice 4, 4))
+#else
 let pFloat (ms:State) = res (ms ++ 8) (BitConverter.ToDouble (ms.Slice 8))
 let pFloat32 (ms:State) = res (ms ++ 4) (BitConverter.ToSingle (ms.Slice 4))
+#endif
 let u8 (ms:State) = res (ms ++ 8) (BinaryPrimitives.ReadUInt64BigEndian (ms.Slice 8))
 let u4 (ms:State) = res (ms ++ 4) (BinaryPrimitives.ReadUInt32BigEndian (ms.Slice 4))
 let u2 (ms:State) = res (ms ++ 2) (BinaryPrimitives.ReadUInt16BigEndian (ms.Slice 2))
@@ -97,10 +105,6 @@ let indexedChoice (indexParser:'a Parse) (parsers:('a * Parse<_>) list) =
 
 let inline isVal (parser : Parse<'a>) (value : 'a) =
     fun x -> parser x |> Option.bind(fun x-> if x.Result = value then Some x else None)
-
-
-let readFile path = { Data = File.ReadAllBytes path; Pos = 0 }
-
 
 let inline isU1Val v = isVal u1 v
 

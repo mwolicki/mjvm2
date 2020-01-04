@@ -1,5 +1,7 @@
 ﻿open Parser
 
+let readFile path = { Data = System.IO.File.ReadAllBytes path; Pos = 0 }
+
 ["HelloWorld$INestedA.class"; "HelloWorld$INestedB.class"; "HelloWorld.class"; "HelloWorld$NestedA.class"; "HelloWorld$NestedB.class"; "module-info.class"]
 |> List.iter(fun fileName ->
     "/Users/kevin/_projects/java/" + fileName
