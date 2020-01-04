@@ -4,6 +4,7 @@
 module Parser
 #endif
 open Domain
+open Domain.Lower
 open System
 open System.IO
 open System.Buffers.Binary

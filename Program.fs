@@ -5,4 +5,5 @@
     "/Users/kevin/_projects/java/" + fileName
     |> readFile
     |> parseHeader
+    |> Option.map(fun x -> DomainEnricher.transform x.Result)
     |> printfn "result for %s\n=========================\n%A" fileName)
