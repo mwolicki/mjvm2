@@ -1,4 +1,5 @@
 module Domain
+open System.Collections.Generic
 
 [<Struct>]
 type  Magic = private { Magic:uint32 }
@@ -58,8 +59,8 @@ type ClassFile = {
     Magic : Magic
     MinorVersion : uint16
     MajorVersion : uint16
-    (*u2             constant_pool_count;
-    cp_info        constant_pool[constant_pool_count-1];
+    ConstantPool : IReadOnlyDictionary<uint16, ConstantType>
+    (*
     u2             access_flags;
     u2             this_class;
     u2             super_class;

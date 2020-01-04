@@ -7,6 +7,7 @@ open Domain
 open System
 open System.IO
 open System.Buffers.Binary
+open System.Collections.Generic
 
 [<Struct>]
 [<StructuredFormatDisplay("State = {ReadOnlyMemory}; Pos = {Pos} ")>]
@@ -81,16 +82,37 @@ let choice (parsers:Parse<_> list) =
             | None -> loop xs
         loop parsers
 
+let indexedChoice (indexParser:'a Parse) (parsers:('a * Parse<_>) list) = 
+    let parsersMap = parsers |> Map.ofList |> Dictionary
+
+    fun state ->
+        option {
+            let! index = indexParser state
+
+            return! 
+                match parsersMap.TryGetValue index.Result with
+                | true, parser -> parser index.State
+                | false, _ -> None
+        }
+
 let inline isVal (parser : Parse<'a>) (value : 'a) =
     fun x -> parser x |> Option.bind(fun x-> if x.Result = value then Some x else None)
 
 
 let readFile path = { Data = File.ReadAllBytes path; Pos = 0 }
 
-let parseHeader = ((u4 .=>. u2) .=>. u2) =~ fun ((magicNumber, minor), major) -> { Magic = magic magicNumber; MinorVersion = minor; MajorVersion = major }
 
 let inline isU1Val v = isVal u1 v
 
+
+let pRefKind =
+    indexedChoice u1 [ 1uy, pSingleton GetField; 2uy, pSingleton GetStatic; 
+                       3uy, pSingleton PutField; 4uy, pSingleton PutStatic; 
+                       5uy, pSingleton InvokeVirtual; 6uy, pSingleton InvokeStatic; 
+                       7uy, pSingleton InvokeSpecial; 8uy, pSingleton NewInvokeSpecial; 
+                       9uy, pSingleton InvokeInterface; ]
+
+let pRefInfo = u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {ClassIndex = classIndex; NameAndTypeIndex = nameAndTypeIndex} )
 
 let pCUtf8 = 
     let pUtf8 : Parse<String> = fun  state ->
@@ -106,17 +128,10 @@ let pCLong = isU1Val 5uy =>. i8 =~ CLong
 let pCDouble = isU1Val 6uy =>. pFloat =~ CDouble
 let pCClass = isU1Val 7uy =>. u2 =~ (Utf8Index >> CClass)
 let pCString = isU1Val 8uy =>. u2 =~ (Utf8Index >> CString)
-let pRefInfo = u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {ClassIndex = classIndex; NameAndTypeIndex = nameAndTypeIndex} )
 let pCFieldref = isU1Val 9uy =>. pRefInfo =~ CFieldref
 let pCMethodType = isU1Val 10uy =>. pRefInfo =~ CMethodref
 let pCInterfaceMethodref = isU1Val 11uy =>. pRefInfo =~ CInterfaceMethodref
 let pCNameAndType = isU1Val 12uy =>. u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {NameIndex = classIndex; DescriptorIndex = Utf8Index nameAndTypeIndex} |> CNameAndType)
-
-let pRefKind =
-    let inline p v c = isU1Val v =>. pSingleton c
-    choice [ p 1uy GetField; p 2uy GetStatic; p 3uy PutField; p 4uy PutStatic
-             p 5uy InvokeVirtual; p 6uy InvokeStatic; p 7uy InvokeSpecial
-             p 8uy NewInvokeSpecial; p 9uy InvokeInterface ]
 
 let pCMethodHandle = isU1Val 15uy =>. pRefKind .=>. u2 =~ (fun (refKind, refIndex) -> {ReferenceKind = refKind; ReferenceIndex = refIndex } |> CMethodHandle)
 
@@ -134,25 +149,22 @@ let pConstType : Parse<ConstantType> = choice [pCUtf8; pCInt; pCFloat;
 
 
 let parseConsts = 
-    let rec loop state count xs : Result<_ list> option =
-        printfn "pos = %d..." count
+    let rec loop state count index xs : Result<IReadOnlyDictionary<_, _>> option =
         if count = 0us then 
-            res state (xs |> List.rev)
+            res state (xs |> Map.ofList |> Dictionary :> _) 
         else 
             option {
                 let! p = pConstType state
-                printfn "pos = %d; val = %A" count p.Result 
-                let count = 
+                let count, nextIndex = 
                     match p.Result with
-                    | CDouble _ | CLong _ -> count - 2us
-                    | _ -> count - 1us
-                return! loop p.State (count) (p.Result :: xs) } |> Option.defaultWith(fun () -> 
-                    (u1 =~ (Unknown >> List.singleton)) state |> Option.get) |> Some
+                    | CDouble _ | CLong _ -> count - 2us, index + 2us
+                    | _ -> count - 1us, index + 1us
+                let xs = (index, p.Result) :: xs
+                return! loop p.State count nextIndex xs }
 
     fun x -> 
         option {
             let! constCount = u2 x
-            printfn "Count %A" constCount.Result
-            return! loop constCount.State constCount.Result [] }
+            return! loop constCount.State constCount.Result 1us [] }
 
-
+let parseHeader = ((u4 .=>. u2) .=>. u2 .=>. parseConsts) =~ fun (((magicNumber, minor), major), consts) -> { Magic = magic magicNumber; MinorVersion = minor; MajorVersion = major; ConstantPool = consts }
