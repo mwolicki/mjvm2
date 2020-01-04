@@ -102,6 +102,20 @@ type Version = {
     AttributeInfo : AttributeInfo list
  }
 
+  type MethodInfo = {
+    /// The value of the access_flags item is a mask of flags used to denote access permission to and properties of this method. The interpretation of each flag, when set, is specified in Table 4.6-A.
+    AccessFlags : AccessFlag
+    /// The value of the name_index item must be a valid index into the constant_pool table. The constant_pool entry at that index must be a CONSTANT_Utf8_info structure (§4.4.7) representing either a valid unqualified name denoting a method (§4.2.2), or (if this method is in a class rather than an interface) the special method name <init>, or the special method name <clinit>.
+    NameIndex : Utf8Index
+    /// The value of the descriptor_index item must be a valid index into the constant_pool table. The constant_pool entry at that index must be a CONSTANT_Utf8_info structure representing a valid method descriptor (§4.3.3). Furthermore:
+    /// 
+    /// * If this method is in a class rather than an interface, and the name of the method is <init>, then the descriptor must denote a void method.
+    /// * If the name of the method is <clinit>, then the descriptor must denote a void method, and, in a class file whose version number is 51.0 or above, a method that takes no arguments.
+    DescriptorIndex : Utf8Index
+    /// Each value of the attributes table must be an attribute_info structure (§4.7).
+    AttributeInfo : AttributeInfo list
+ }
+
 type ClassFile = {
     /// The magic item supplies the magic number identifying the class file format; it has the value 0xCAFEBABE.
     Magic : Magic
@@ -123,11 +137,10 @@ type ClassFile = {
     Interfaces : ClassInfo list
     /// Each value in the fields table must be a field_info structure (§4.5) giving a complete description of a field in this class or interface. The fields table includes only those fields that are declared by this class or interface. It does not include items representing fields that are inherited from superclasses or superinterfaces.
     Fields : FieldInfo list
-    (*
-    fields_count;
-    field_info     fields[fields_count];
-    methods_count;
-    method_info    methods[methods_count];
-    attributes_count;
-    attribute_info attributes[attributes_count];*)
+    /// Each value in the methods table must be a method_info structure (§4.6) giving a complete description of a method in this class or interface. If neither of the ACC_NATIVE and ACC_ABSTRACT flags are set in the access_flags item of a method_info structure, the Java Virtual Machine instructions implementing the method are also supplied.
+    /// 
+    /// The method_info structures represent all methods declared by this class or interface type, including instance methods, class methods, instance initialization methods (§2.9.1), and any class or interface initialization method (§2.9.2). The methods table does not include items representing methods that are inherited from superclasses or superinterfaces.
+    Methods : MethodInfo list
+    /// Each value of the attributes table must be an attribute_info structure (§4.7).
+    Attributes : AttributeInfo list
 }

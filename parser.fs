@@ -204,9 +204,21 @@ let pFields = parseLoop (pAccessFlags .=>. u2 .=>. u2 .=>. (parseLoop pAttribute
                       DescriptorIndex = Utf8Index descriptorIndex
                       AttributeInfo = attricuteInfo })
 
+let pMethods = parseLoop (pAccessFlags .=>. u2 .=>. u2 .=>. (parseLoop pAttributeInfo) =~
+                    fun (((accessFlags, nameIndex), descriptorIndex), attricuteInfo) ->
+                    { MethodInfo.AccessFlags = accessFlags
+                      NameIndex = Utf8Index nameIndex
+                      DescriptorIndex = Utf8Index descriptorIndex
+                      AttributeInfo = attricuteInfo })
+
+let pAttributes = parseLoop pAttributeInfo
+
+let eom (state:State) = 
+    if state.Span.IsEmpty then res state () else None
+
 let parseHeader = 
-    (u4 .=>. pVersion .=>. parseConsts .=>. pAccessFlags .=>. pThisClass .=>. pSuperClass .=>. pInterfaces .=>. pFields) 
-    =~ fun (((((((magicNumber, version), consts), accessFlags), thisClass) , superClass), interfaces), fields) -> 
+    (u4 .=>. pVersion .=>. parseConsts .=>. pAccessFlags .=>. pThisClass .=>. pSuperClass .=>. pInterfaces .=>. pFields .=>. pMethods .=>. pAttributes .=> eom) 
+    =~ fun (((((((((magicNumber, version), consts), accessFlags), thisClass) , superClass), interfaces), fields), methods), attributes) -> 
         { Magic = magic magicNumber;
           Version = version
           ConstantPool = consts
@@ -214,4 +226,6 @@ let parseHeader =
           ThisClass = thisClass
           SuperClass = superClass
           Interfaces = interfaces
-          Fields = fields }
+          Fields = fields
+          Methods = methods
+          Attributes = attributes }
