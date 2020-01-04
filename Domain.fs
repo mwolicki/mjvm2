@@ -53,15 +53,35 @@ type ConstantType =
 | CInvokeDynamic of DynamicInfo
 | CModule of Utf8Index
 | CPackage of Utf8Index
-| Unknown of uint8
+
+[<System.Flags>]
+type AccessFlag =
+/// Declared public; may be accessed from outside its package.
+| ACC_PUBLIC = 0x0001
+/// Declared final; no subclasses allowed.
+| ACC_FINAL = 0x0010
+/// Treat superclass methods specially when invoked by the invokespecial instruction.
+| ACC_SUPER = 0x0020
+/// Is an interface, not a class.
+| ACC_INTERFACE = 0x0200
+/// Declared abstract; must not be instantiated.
+| ACC_ABSTRACT = 0x0400
+/// Declared synthetic; not present in the source code.
+| ACC_SYNTHETIC = 0x1000
+/// Declared as an annotation type.
+| ACC_ANNOTATION = 0x2000
+/// Declared as an enum type.
+| ACC_ENUM = 0x4000
+/// Is a module, not a class or interface.
+| ACC_MODULE = 0x8000
 
 type ClassFile = {
     Magic : Magic
     MinorVersion : uint16
     MajorVersion : uint16
     ConstantPool : IReadOnlyDictionary<uint16, ConstantType>
+    AccessFlags : AccessFlag
     (*
-    u2             access_flags;
     u2             this_class;
     u2             super_class;
     u2             interfaces_count;

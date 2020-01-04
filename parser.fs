@@ -164,4 +164,7 @@ let parseConsts =
             let! constCount = u2 x
             return! loop constCount.State (constCount.Result - 1us) 1us [] }
 
-let parseHeader = ((u4 .=>. u2) .=>. u2 .=>. parseConsts) =~ fun (((magicNumber, minor), major), consts) -> { Magic = magic magicNumber; MinorVersion = minor; MajorVersion = major; ConstantPool = consts }
+let pAccessFlags =
+    u2 =~ (int32 >> enum<AccessFlag>)
+
+let parseHeader = ((u4 .=>. u2) .=>. u2 .=>. parseConsts .=>. pAccessFlags) =~ fun ((((magicNumber, minor), major), consts), accessFlags) -> { Magic = magic magicNumber; MinorVersion = minor; MajorVersion = major; ConstantPool = consts; AccessFlags = accessFlags }
