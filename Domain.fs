@@ -211,18 +211,39 @@ module Higher =
     type OpsCode =
     | Nop
     | Aconst_null
-    | Iconst of sbyte
+    | IConst of sbyte
+    | LConst of byte
+    | FConst of float32
+    | DConst of float
     | Ldc of uint8
+    | Ldc2_w of uint16
+    | BiPush of byte
+    | SiPush of int16
     | Iload of uint8
     | Aload of uint8
+    | DStore of uint8
+    | AStore of uint8
+    | IaLoad
+    | IStore of byte
+    | FStore of byte
+    | LaStore
+    | AaLoad
+    | SaStore
+    | Dup
+    | Swap
     | Areturn
     | PutField of uint16
     | InvokeSpecial of uint16
     | InvokeVirtual of uint16
+    | InvokeStatic of uint16
     | ReturnVoid
+    | GetStatic of uint16
     | Unknown of uint8
     | NewArray of ArrayType
+    | MultiAnewArray of index : uint16 * dimensions : byte 
     | AnewArray of uint16
+    | IfNull of branchReference:uint16
+    | IfNonNull of branchReference:uint16
 
     type CodeAttribute = {
         MaxStack : uint16

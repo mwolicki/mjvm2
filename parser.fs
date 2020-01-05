@@ -24,11 +24,14 @@ with
 
 type OptionBuilder () =
     //M<'T> * ('T -> M<'U>) -> M<'U>
-    member this.Bind (m, f) = m |> Option.bind f
+    member inline this.Bind (m, f) = m |> Option.bind f
+    member this.Zero () = None
     member this.Yield v = Some v
+    member this.YieldFrom v = v
     member this.Return v = Some v
-    member this.ReturnFrom v = v
-    member this.Delay f = f ()
+    member this.ReturnFrom (v: _ option) = v
+    member this.Delay f = f 
+    member this.Run f = f ()
     member this.Combine (a, b) = 
         match a,b with
         | Some a, Some b -> Some (a, b)
@@ -179,23 +182,25 @@ let inline parseLoop f =
         if count <= 0us then 
             res state (xs |> List.rev) 
         else 
-            option {
-                let! { Result = result; State = state } = f state
-                return! loop state (count - 1us) (result :: xs) }
+            match f state with
+            | Some { Result = result; State = state } ->
+                loop state (count - 1us) (result :: xs)
+            | None -> None
 
     fun x -> 
         option {
             let! { Result = count; State = state } = u2 x
             return! loop state count [] }
 
-let inline parseLoopU4 f = 
+let parseLoopU4 f = 
     let rec loop state count xs : Result<_ list> option =
         if count <= 0u then 
             res state (xs |> List.rev) 
         else 
-            option {
-                let! { Result = result; State = state } = f state
-                return! loop state (count - 1u) (result :: xs) }
+            match f state with
+            | Some { Result = result; State = state } ->
+                loop state (count - 1u) (result :: xs)
+            | None -> None
 
     fun x -> 
         option {
@@ -258,7 +263,9 @@ let indexedChoice' (indexParser:uint8 Parse) (parsers:(uint8 * Parse<_>) list) =
             return! 
                 match parsersMap.TryGetValue index.Result with
                 | true, parser -> parser index.State
-                | false, _ -> res (state ++ 1) (Higher.OpsCode.Unknown index.Result)
+                | false, _ -> 
+                    failwithf "Unknown ops 0x%x (%d)" index.Result index.Result
+                    //res (state ++ 1) (Higher.OpsCode.Unknown index.Result)
         }
 let getArrayType = function
 | 4uy -> ArrayType.T_BOOLEAN
@@ -274,14 +281,24 @@ let getArrayType = function
 let pOpsCode = indexedChoice' u1 [
         0uy, pSingleton OpsCode.Nop
         1uy, pSingleton OpsCode.Aconst_null
-        2uy, pSingleton (OpsCode.Iconst -1y)
-        3uy, pSingleton (OpsCode.Iconst 0y)
-        4uy, pSingleton (OpsCode.Iconst 1y)
-        5uy, pSingleton (OpsCode.Iconst 2y)
-        6uy, pSingleton (OpsCode.Iconst 3y)
-        7uy, pSingleton (OpsCode.Iconst 4y)
-        8uy, pSingleton (OpsCode.Iconst 5y)
+        2uy, pSingleton (OpsCode.IConst -1y)
+        3uy, pSingleton (OpsCode.IConst 0y)
+        4uy, pSingleton (OpsCode.IConst 1y)
+        5uy, pSingleton (OpsCode.IConst 2y)
+        6uy, pSingleton (OpsCode.IConst 3y)
+        7uy, pSingleton (OpsCode.IConst 4y)
+        8uy, pSingleton (OpsCode.IConst 5y)
+        9uy, pSingleton (OpsCode.LConst 0uy)
+        10uy, pSingleton (OpsCode.LConst 1uy)
+        11uy, pSingleton (OpsCode.FConst 0.f)
+        12uy, pSingleton (OpsCode.FConst 1.f)
+        13uy, pSingleton (OpsCode.FConst 2.f)
+        14uy, pSingleton (OpsCode.DConst 0.)
+        15uy, pSingleton (OpsCode.DConst 1.)
+        16uy, u1 =~ OpsCode.BiPush
+        17uy, i2 =~ OpsCode.SiPush
         18uy, u1 =~ OpsCode.Ldc
+        20uy, u2 =~ OpsCode.Ldc2_w
         21uy, u1 =~ OpsCode.Iload
         25uy, u1 =~ OpsCode.Aload
         26uy, pSingleton (OpsCode.Iload 0uy)
@@ -292,13 +309,43 @@ let pOpsCode = indexedChoice' u1 [
         43uy, pSingleton (OpsCode.Aload 1uy)
         44uy, pSingleton (OpsCode.Aload 2uy)
         45uy, pSingleton (OpsCode.Aload 3uy)
+        46uy, pSingleton OpsCode.LaStore
+        50uy, pSingleton OpsCode.AaLoad
+        54uy, u1 =~ OpsCode.IStore
+        56uy, u1 =~ OpsCode.FStore
+        57uy, u1 =~ OpsCode.DStore
+        58uy, u1 =~ OpsCode.AStore
+        59uy, pSingleton (OpsCode.IStore 0uy)
+        60uy, pSingleton (OpsCode.IStore 1uy)
+        61uy, pSingleton (OpsCode.IStore 2uy)
+        62uy, pSingleton (OpsCode.IStore 3uy)
+        67uy, pSingleton (OpsCode.FStore 0uy)
+        68uy, pSingleton (OpsCode.FStore 1uy)
+        69uy, pSingleton (OpsCode.FStore 2uy)
+        70uy, pSingleton (OpsCode.FStore 3uy)
+        72uy, pSingleton (OpsCode.DStore 0uy)
+        73uy, pSingleton (OpsCode.DStore 1uy)
+        74uy, pSingleton (OpsCode.DStore 2uy)
+        75uy, pSingleton (OpsCode.AStore 3uy)
+        76uy, pSingleton (OpsCode.AStore 1uy)
+        77uy, pSingleton (OpsCode.AStore 2uy)
+        78uy, pSingleton (OpsCode.AStore 3uy)
+        80uy, pSingleton OpsCode.LaStore
+        86uy, pSingleton OpsCode.SaStore
+        89uy, pSingleton OpsCode.Dup
+        96uy, pSingleton OpsCode.Swap
         176uy, pSingleton OpsCode.Areturn
         177uy, pSingleton OpsCode.ReturnVoid
+        178uy, u2 =~ OpsCode.GetStatic
         181uy, u2 =~ OpsCode.PutField
         182uy, u2 =~ OpsCode.InvokeVirtual
         183uy, u2 =~ OpsCode.InvokeSpecial
+        184uy, u2 =~ OpsCode.InvokeStatic
         188uy, u1 =~ (getArrayType >> OpsCode.NewArray)
         189uy, u2 =~ OpsCode.AnewArray
+        197uy, u2 .=>. u1 =~ OpsCode.MultiAnewArray
+        198uy, u2 =~ OpsCode.IfNull
+        199uy, u2 =~ OpsCode.IfNonNull
     ]
 
 let parseCode = 
