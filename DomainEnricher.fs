@@ -2,6 +2,7 @@ module DomainEnricher
 open System
 open Domain
 open Domain.Higher
+open System.Buffers.Binary
 
 
 let getUtf8 (classFile:Lower.ClassFile) (Lower.Utf8Index index) = 
@@ -31,6 +32,23 @@ let rec getFieldDescriptor (s:ReadOnlySpan<_>) =
         getFieldDescriptor slice |> FieldDescriptor.Array
     | _ -> failwithf "Unknown recognise field descriptor: '%s'" (String s)
 
+let getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
+    let getAttributeConst (info:ReadOnlyMemory<byte>) = 
+        let index = BinaryPrimitives.ReadUInt16BigEndian info.Span
+        match classFile.ConstantPool.TryGetValue index with
+        | true, Lower.CString utf8 -> getUtf8 classFile utf8 |> AttributeConst.String
+        | true, Lower.CDouble value -> AttributeConst.Double value
+        | true, Lower.CFloat value -> AttributeConst.Float value
+        | true, Lower.CInteger value -> AttributeConst.Integer value
+        | true, Lower.CLong value -> AttributeConst.Long value
+        | true, unknown -> failwithf "Unknown const: %A for attribute: %A" unknown ai
+        | false, _ -> failwithf "Unknown index: %d for attribute: %A" index ai
+
+    let name = getUtf8 classFile ai.AttributeNameIndex
+    match name with
+    | "ConstantValue" -> getAttributeConst ai.Info |> Const
+    | _ -> Unsupported {| Name = name; Info = ai.Info |}
+
 
 let transform (classFile : Lower.ClassFile) : ClassFile =
 
@@ -39,7 +57,7 @@ let transform (classFile : Lower.ClassFile) : ClassFile =
             FieldInfo.AccessFlags = fieldInfo.AccessFlags
             Name = getUtf8 classFile fieldInfo.NameIndex
             Descriptor = getUtf8 classFile fieldInfo.DescriptorIndex |> fun s -> let span = s.AsSpan () in getFieldDescriptor (span)
-            Attributes = fieldInfo.AttributeInfo |> List.map (fun x-> { Name = getUtf8 classFile x.AttributeNameIndex; Info = x.Info })
+            Attributes = fieldInfo.AttributeInfo |> List.map (getAttribute classFile)
         }
     {
         AccessFlags = classFile.AccessFlags

@@ -175,10 +175,22 @@ module Higher =
     /// [	reference	one array dimension
     | Array of FieldDescriptor
 
-     type AttributeInfo = {
-        Name : string
-        Info : ReadOnlyMemory<byte>
-    }
+    [<RequireQualifiedAccess>]
+    type AttributeConst =
+    /// int, short, char, byte, boolean	CONSTANT_Integer
+    | Integer of int
+    /// float	CONSTANT_Float
+    | Float of float32
+    /// long	CONSTANT_Long
+    | Long of int64
+    /// double	CONSTANT_Double
+    | Double of float
+    /// String	CONSTANT_String
+    | String of string
+
+    type AttributeInfo =
+    | Const of AttributeConst
+    | Unsupported of {| Name : string; Info : ReadOnlyMemory<byte> |}
 
 
     type FieldInfo = {
