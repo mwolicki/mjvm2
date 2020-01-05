@@ -195,14 +195,19 @@ module Higher =
         CatchType : string
     }
 
+    [<RequireQualifiedAccess>]
     type OpsCode =
-    | Unknown of uint16
+    | Aconst_null
+    | Aload of uint8
+    | Putfield of uint16
+    | Invokespecial of uint16
+    | ReturnVoid
+    | Unknown of uint8
 
     type CodeAttribute = {
-        Name : string
         MaxStack : uint16
         MaxLocals : uint16
-        //Code : OpsCode list
+        Code : OpsCode list
         //ExceptionTable : ExceptionEntry list 
         //Attributes : AttributeInfo list
     } and AttributeInfo =

@@ -39,6 +39,8 @@ let getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
     | "SourceFile" -> 
         BinaryPrimitives.ReadUInt16BigEndian ai.Info.Span
         |> Lower.Utf8Index |> getUtf8 classFile |> SourceFile
+    | "Code" ->
+        Parser.parseCode ai.Info |> Code
     | _ -> Unsupported {| Name = name; Info = ai.Info |}
 
 

@@ -188,6 +188,21 @@ let inline parseLoop f =
             let! { Result = count; State = state } = u2 x
             return! loop state count [] }
 
+let inline parseLoopU4 f = 
+    let rec loop state count xs : Result<_ list> option =
+        if count <= 0u then 
+            res state (xs |> List.rev) 
+        else 
+            option {
+                let! { Result = result; State = state } = f state
+                return! loop state (count - 1u) (result :: xs) }
+
+    fun x -> 
+        option {
+            let! { Result = count; State = state } = u4 x
+            return! loop state count [] }
+
+
 
 let pInterfaces = parseLoop (u2 =~ ClassInfo)
 
@@ -233,11 +248,39 @@ let parseHeader =
           Methods = methods
           Attributes = attributes }
 
+open Higher
 
-let parseCode (classFile: ClassFile) (data:ReadOnlyMemory<byte>) = 
-    let pName = u2 =~ (ClassInfo >> getClassInfo classFile)
-    (pName .=>. u2 .=>. u2 =~ fun ((name, maxStack), maxLocals) -> {
-        Higher.CodeAttribute.Name = name
+let indexedChoice' (indexParser:uint8 Parse) (parsers:(uint8 * Parse<_>) list) = 
+    let parsersMap = parsers |> Map.ofList |> Dictionary
+    printfn "%A" parsers
+    fun state ->
+        option {
+            let! index = indexParser state
+            return! 
+                match parsersMap.TryGetValue index.Result with
+                | true, parser -> parser index.State
+                | false, _ -> res (state ++ 1) (Higher.OpsCode.Unknown index.Result)
+        }
+
+let pOpsCode = indexedChoice' u1 [
+        1uy, pSingleton (OpsCode.Aconst_null)
+        25uy, u1 =~ (OpsCode.Aload)
+        42uy, pSingleton (OpsCode.Aload 0uy)
+        43uy, pSingleton (OpsCode.Aload 1uy)
+        44uy, pSingleton (OpsCode.Aload 2uy)
+        45uy, pSingleton (OpsCode.Aload 3uy)
+        177uy, pSingleton (OpsCode.ReturnVoid)
+        181uy, u2 =~ (OpsCode.Putfield)
+        183uy, u2 =~ (OpsCode.Invokespecial)
+    ]
+
+let parseCode = 
+    
+    let pCode = parseLoopU4 pOpsCode
+    let p = (u2 .=>. u2 .=>. pCode =~ fun ((maxStack, maxLocals), code) -> {
         Higher.CodeAttribute.MaxStack = maxStack
         Higher.CodeAttribute.MaxLocals = maxLocals
-    }) ({ Data = data }) |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
+        Higher.CodeAttribute.Code = code
+    })
+    fun data ->
+    p ({ Data = data }) |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
