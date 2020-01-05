@@ -202,9 +202,9 @@ module Higher =
         Name : string
         MaxStack : uint16
         MaxLocals : uint16
-        Code : OpsCode list
-        ExceptionTable : ExceptionEntry list 
-        Attributes : AttributeInfo list
+        //Code : OpsCode list
+        //ExceptionTable : ExceptionEntry list 
+        //Attributes : AttributeInfo list
     } and AttributeInfo =
     | Const of AttributeConst
     | SourceFile of string

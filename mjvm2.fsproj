@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Domain.fs" />
+    <Compile Include="DomainCommonFunctions.fs" />
     <Compile Include="parser.fs" />
     <Compile Include="DomainEnricher.fs" />
     <Compile Include="Program.fs" />

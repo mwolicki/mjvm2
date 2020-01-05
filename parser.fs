@@ -4,6 +4,7 @@
 module Parser
 #endif
 open Domain
+open DomainCommonFunctions
 open Domain.Lower
 open System
 open System.IO
@@ -12,13 +13,14 @@ open System.Collections.Generic
 
 [<Struct>]
 [<StructuredFormatDisplay("State = {AsArray}; Pos = {Pos} ")>]
-type State = { Data : byte array; Pos : int }
+type State = { Data : ReadOnlyMemory<byte> }
 with 
-    member s.Span = ReadOnlySpan(s.Data, s.Pos, s.Data.Length - s.Pos)
-    member s.AsArray = s.Data.[s.Pos..]
-    member s.ReadOnlyMemorySlice len = ReadOnlyMemory(s.Data, s.Pos, len)
-    member s.Slice len = ReadOnlySpan(s.Data, s.Pos, len)
-    static member inline(++) (x:State, i) = { x with Pos = x.Pos + i}
+    member s.Span = s.Data.Span
+    member s.ReadOnlyMemorySlice len = s.Data.Slice (0, len)
+    member s.AsArray = s.Span.ToArray ()
+    member s.Slice len = s.Span.Slice (0, len)
+    member s.Item with get i = s.Span.[i]
+    static member inline(++) (x:State, i) = { x with Data = x.Data.Slice i }
 
 type OptionBuilder () =
     //M<'T> * ('T -> M<'U>) -> M<'U>
@@ -68,7 +70,7 @@ let pFloat32 (ms:State) = res (ms ++ 4) (BitConverter.ToSingle (ms.Slice 4))
 let u8 (ms:State) = res (ms ++ 8) (BinaryPrimitives.ReadUInt64BigEndian (ms.Slice 8))
 let u4 (ms:State) = res (ms ++ 4) (BinaryPrimitives.ReadUInt32BigEndian (ms.Slice 4))
 let u2 (ms:State) = res (ms ++ 2) (BinaryPrimitives.ReadUInt16BigEndian (ms.Slice 2))
-let u1 (ms:State) = res (ms ++ 1) ms.Data.[ms.Pos]
+let u1 (ms:State) = res (ms ++ 1) ms.[0]
 
 let i8 (ms:State) = res (ms ++ 8) (BinaryPrimitives.ReadInt64BigEndian (ms.Slice 8))
 let i4 (ms:State) = res (ms ++ 4) (BinaryPrimitives.ReadInt32BigEndian (ms.Slice 4))
@@ -100,7 +102,7 @@ let inline isVal (parser : Parse<'a>) (value : 'a) =
     fun x -> parser x |> Option.bind(fun x-> if x.Result = value then Some x else None)
 
 
-let readFile path = { Data = File.ReadAllBytes path; Pos = 0 }
+let readFile path = { Data = File.ReadAllBytes path |> ReadOnlyMemory }
 
 
 let inline isU1Val v = isVal u1 v
@@ -230,3 +232,12 @@ let parseHeader =
           Fields = fields
           Methods = methods
           Attributes = attributes }
+
+
+let parseCode (classFile: ClassFile) (data:ReadOnlyMemory<byte>) = 
+    let pName = u2 =~ (ClassInfo >> getClassInfo classFile)
+    (pName .=>. u2 .=>. u2 =~ fun ((name, maxStack), maxLocals) -> {
+        Higher.CodeAttribute.Name = name
+        Higher.CodeAttribute.MaxStack = maxStack
+        Higher.CodeAttribute.MaxLocals = maxLocals
+    }) ({ Data = data }) |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
