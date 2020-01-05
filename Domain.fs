@@ -190,6 +190,7 @@ module Higher =
 
     type AttributeInfo =
     | Const of AttributeConst
+    | SourceFile of string
     | Unsupported of {| Name : string; Info : ReadOnlyMemory<byte> |}
 
 
@@ -206,6 +207,7 @@ module Higher =
         SuperClass : string option
         Interfaces : string list
         Fields : FieldInfo list
+        Attributes : AttributeInfo list
     }
 
 

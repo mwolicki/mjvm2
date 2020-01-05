@@ -47,6 +47,9 @@ let getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
     let name = getUtf8 classFile ai.AttributeNameIndex
     match name with
     | "ConstantValue" -> getAttributeConst ai.Info |> Const
+    | "SourceFile" -> 
+        BinaryPrimitives.ReadUInt16BigEndian ai.Info.Span
+        |> Lower.Utf8Index |> getUtf8 classFile |> SourceFile
     | _ -> Unsupported {| Name = name; Info = ai.Info |}
 
 
@@ -65,4 +68,5 @@ let transform (classFile : Lower.ClassFile) : ClassFile =
         SuperClass = classFile.SuperClass |> Option.map (getClassInfo classFile)
         Interfaces = classFile.Interfaces |> List.map (getClassInfo classFile)
         Fields = classFile.Fields |> List.map getFieldInfo
+        Attributes = classFile.Attributes |> List.map (getAttribute classFile)
     }
