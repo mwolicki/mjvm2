@@ -62,11 +62,21 @@ let transform (classFile : Lower.ClassFile) : ClassFile =
             Descriptor = getUtf8 classFile fieldInfo.DescriptorIndex |> fun s -> let span = s.AsSpan () in getFieldDescriptor (span)
             Attributes = fieldInfo.AttributeInfo |> List.map (getAttribute classFile)
         }
+
+
+    let getMethodInfo (methodInfo:Lower.MethodInfo) =
+        {
+            MethodInfo.AccessFlags = methodInfo.AccessFlags
+            Name = getUtf8 classFile methodInfo.NameIndex
+            Descriptor = getUtf8 classFile methodInfo.DescriptorIndex
+            Attributes = methodInfo.AttributeInfo |> List.map (getAttribute classFile)
+        }
     {
         AccessFlags = classFile.AccessFlags
         ThisClass = getClassInfo classFile classFile.ThisClass
         SuperClass = classFile.SuperClass |> Option.map (getClassInfo classFile)
         Interfaces = classFile.Interfaces |> List.map (getClassInfo classFile)
         Fields = classFile.Fields |> List.map getFieldInfo
+        Methods = classFile.Methods |> List.map getMethodInfo
         Attributes = classFile.Attributes |> List.map (getAttribute classFile)
     }

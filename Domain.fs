@@ -188,9 +188,27 @@ module Higher =
     /// String	CONSTANT_String
     | String of string
 
-    type AttributeInfo =
+    type ExceptionEntry = {
+        StartPc : uint16
+        EndPc : uint16
+        HandlerPc : uint16
+        CatchType : string
+    }
+
+    type OpsCode =
+    | Unknown of uint16
+
+    type CodeAttribute = {
+        Name : string
+        MaxStack : uint16
+        MaxLocals : uint16
+        Code : OpsCode list
+        ExceptionTable : ExceptionEntry list 
+        Attributes : AttributeInfo list
+    } and AttributeInfo =
     | Const of AttributeConst
     | SourceFile of string
+    | Code of CodeAttribute
     | Unsupported of {| Name : string; Info : ReadOnlyMemory<byte> |}
 
 
@@ -198,6 +216,12 @@ module Higher =
         AccessFlags : AccessFlag
         Name : string
         Descriptor : FieldDescriptor
+        Attributes : AttributeInfo list }
+
+    type MethodInfo = {
+        AccessFlags : AccessFlag
+        Name : string
+        Descriptor : string
         Attributes : AttributeInfo list
      }
 
@@ -207,6 +231,7 @@ module Higher =
         SuperClass : string option
         Interfaces : string list
         Fields : FieldInfo list
+        Methods : MethodInfo list
         Attributes : AttributeInfo list
     }
 
