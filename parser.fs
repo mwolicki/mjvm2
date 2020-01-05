@@ -252,7 +252,6 @@ open Higher
 
 let indexedChoice' (indexParser:uint8 Parse) (parsers:(uint8 * Parse<_>) list) = 
     let parsersMap = parsers |> Map.ofList |> Dictionary
-    printfn "%A" parsers
     fun state ->
         option {
             let! index = indexParser state
@@ -261,17 +260,45 @@ let indexedChoice' (indexParser:uint8 Parse) (parsers:(uint8 * Parse<_>) list) =
                 | true, parser -> parser index.State
                 | false, _ -> res (state ++ 1) (Higher.OpsCode.Unknown index.Result)
         }
+let getArrayType = function
+| 4uy -> ArrayType.T_BOOLEAN
+| 5uy -> ArrayType.T_CHAR
+| 6uy -> ArrayType.T_FLOAT
+| 7uy -> ArrayType.T_DOUBLE
+| 8uy -> ArrayType.T_BYTE
+| 9uy -> ArrayType.T_SHORT
+| 10uy -> ArrayType.T_INT
+| 11uy -> ArrayType.T_LONG
+| x -> failwithf "Unknown array type %d" x
 
 let pOpsCode = indexedChoice' u1 [
-        1uy, pSingleton (OpsCode.Aconst_null)
-        25uy, u1 =~ (OpsCode.Aload)
+        0uy, pSingleton OpsCode.Nop
+        1uy, pSingleton OpsCode.Aconst_null
+        2uy, pSingleton (OpsCode.Iconst -1y)
+        3uy, pSingleton (OpsCode.Iconst 0y)
+        4uy, pSingleton (OpsCode.Iconst 1y)
+        5uy, pSingleton (OpsCode.Iconst 2y)
+        6uy, pSingleton (OpsCode.Iconst 3y)
+        7uy, pSingleton (OpsCode.Iconst 4y)
+        8uy, pSingleton (OpsCode.Iconst 5y)
+        18uy, u1 =~ OpsCode.Ldc
+        21uy, u1 =~ OpsCode.Iload
+        25uy, u1 =~ OpsCode.Aload
+        26uy, pSingleton (OpsCode.Iload 0uy)
+        27uy, pSingleton (OpsCode.Iload 1uy)
+        28uy, pSingleton (OpsCode.Iload 2uy)
+        29uy, pSingleton (OpsCode.Iload 3uy)
         42uy, pSingleton (OpsCode.Aload 0uy)
         43uy, pSingleton (OpsCode.Aload 1uy)
         44uy, pSingleton (OpsCode.Aload 2uy)
         45uy, pSingleton (OpsCode.Aload 3uy)
-        177uy, pSingleton (OpsCode.ReturnVoid)
-        181uy, u2 =~ (OpsCode.Putfield)
-        183uy, u2 =~ (OpsCode.Invokespecial)
+        176uy, pSingleton OpsCode.Areturn
+        177uy, pSingleton OpsCode.ReturnVoid
+        181uy, u2 =~ OpsCode.PutField
+        182uy, u2 =~ OpsCode.InvokeVirtual
+        183uy, u2 =~ OpsCode.InvokeSpecial
+        188uy, u1 =~ (getArrayType >> OpsCode.NewArray)
+        189uy, u2 =~ OpsCode.AnewArray
     ]
 
 let parseCode = 

@@ -195,14 +195,34 @@ module Higher =
         CatchType : string
     }
 
+    [<Struct>]
+    [<RequireQualifiedAccess>]
+    type ArrayType =
+    | T_BOOLEAN
+    | T_CHAR
+    | T_FLOAT
+    | T_DOUBLE
+    | T_BYTE
+    | T_SHORT
+    | T_INT
+    | T_LONG
+
     [<RequireQualifiedAccess>]
     type OpsCode =
+    | Nop
     | Aconst_null
+    | Iconst of sbyte
+    | Ldc of uint8
+    | Iload of uint8
     | Aload of uint8
-    | Putfield of uint16
-    | Invokespecial of uint16
+    | Areturn
+    | PutField of uint16
+    | InvokeSpecial of uint16
+    | InvokeVirtual of uint16
     | ReturnVoid
     | Unknown of uint8
+    | NewArray of ArrayType
+    | AnewArray of uint16
 
     type CodeAttribute = {
         MaxStack : uint16
