@@ -192,7 +192,7 @@ module Higher =
         StartPc : uint16
         EndPc : uint16
         HandlerPc : uint16
-        CatchType : string
+        CatchType : uint16
     }
 
     [<Struct>]
@@ -249,7 +249,7 @@ module Higher =
         MaxStack : uint16
         MaxLocals : uint16
         Code : OpsCode list
-        //ExceptionTable : ExceptionEntry list 
+        ExceptionTable : ExceptionEntry list 
         //Attributes : AttributeInfo list
     } and AttributeInfo =
     | Const of AttributeConst

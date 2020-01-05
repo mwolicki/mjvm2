@@ -4,7 +4,6 @@
 module Parser
 #endif
 open Domain
-open DomainCommonFunctions
 open Domain.Lower
 open System
 open System.IO
@@ -12,15 +11,16 @@ open System.Buffers.Binary
 open System.Collections.Generic
 
 [<Struct>]
-[<StructuredFormatDisplay("State = {AsArray}; Pos = {Pos} ")>]
-type State = { Data : ReadOnlyMemory<byte> }
+[<StructuredFormatDisplay("State = {AsArray}; Pos = {Pos}")>]
+type State = { Data : ReadOnlyMemory<byte>; Pos : int }
 with 
     member s.Span = s.Data.Span
     member s.ReadOnlyMemorySlice len = s.Data.Slice (0, len)
     member s.AsArray = s.Span.ToArray ()
     member s.Slice len = s.Span.Slice (0, len)
     member s.Item with get i = s.Span.[i]
-    static member inline(++) (x:State, i) = { x with Data = x.Data.Slice i }
+    static member inline(++) (x:State, i) = { x with Data = x.Data.Slice i; Pos = x.Pos + i }
+    static member init data = { Data = data; Pos = 0 }
 
 type OptionBuilder () =
     //M<'T> * ('T -> M<'U>) -> M<'U>
@@ -105,7 +105,7 @@ let inline isVal (parser : Parse<'a>) (value : 'a) =
     fun x -> parser x |> Option.bind(fun x-> if x.Result = value then Some x else None)
 
 
-let readFile path = { Data = File.ReadAllBytes path |> ReadOnlyMemory }
+let readFile path = File.ReadAllBytes path |> ReadOnlyMemory |> State.init
 
 
 let inline isU1Val v = isVal u1 v
@@ -193,21 +193,21 @@ let inline parseLoop f =
             return! loop state count [] }
 
 let parseLoopU4 f = 
-    let rec loop state count xs : Result<_ list> option =
-        if count <= 0u then 
+    let rec loop state destPosition xs : Result<_ list> option =
+        if destPosition = state.Pos then 
             res state (xs |> List.rev) 
+        elif destPosition < state.Pos then 
+            failwithf "Unexpected position - expected %d got %d" destPosition state.Pos
         else 
             match f state with
             | Some { Result = result; State = state } ->
-                loop state (count - 1u) (result :: xs)
+                loop state destPosition (result :: xs)
             | None -> None
 
     fun x -> 
         option {
             let! { Result = count; State = state } = u4 x
-            return! loop state count [] }
-
-
+            return! loop state (state.Pos + int count) [] }
 
 let pInterfaces = parseLoop (u2 =~ ClassInfo)
 
@@ -348,13 +348,22 @@ let pOpsCode = indexedChoice' u1 [
         199uy, u2 =~ OpsCode.IfNonNull
     ]
 
+let pExceptionEntry =
+    u2 .=>. u2 .=>. u2 .=>. u2 =~ fun (((startPc, endPc), handlerPc), catchType) -> {
+        StartPc = startPc
+        EndPc = endPc
+        HandlerPc = handlerPc
+        CatchType = catchType
+    }
+
 let parseCode = 
     
     let pCode = parseLoopU4 pOpsCode
-    let p = (u2 .=>. u2 .=>. pCode =~ fun ((maxStack, maxLocals), code) -> {
+    let p = (u2 .=>. u2 .=>. pCode .=>. (parseLoop pExceptionEntry) =~ fun (((maxStack, maxLocals), code), exceptionEntry) -> {
         Higher.CodeAttribute.MaxStack = maxStack
         Higher.CodeAttribute.MaxLocals = maxLocals
         Higher.CodeAttribute.Code = code
+        Higher.CodeAttribute.ExceptionTable = exceptionEntry
     })
     fun data ->
-    p ({ Data = data }) |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
+    State.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
