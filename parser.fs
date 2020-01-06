@@ -19,20 +19,20 @@ with
     member s.AsArray = s.Span.ToArray ()
     member s.Slice len = s.Span.Slice (0, len)
     member s.Item with get i = s.Span.[i]
-    static member inline(++) (x:State, i) = { x with Data = x.Data.Slice i; Pos = x.Pos + i }
+    static member inline (++) (x:State, i) = { x with Data = x.Data.Slice i; Pos = x.Pos + i }
     static member init data = { Data = data; Pos = 0 }
 
 type OptionBuilder () =
     //M<'T> * ('T -> M<'U>) -> M<'U>
-    member inline this.Bind (m, f) = m |> Option.bind f
-    member this.Zero () = None
-    member this.Yield v = Some v
-    member this.YieldFrom v = v
-    member this.Return v = Some v
-    member this.ReturnFrom (v: _ option) = v
-    member this.Delay f = f 
-    member this.Run f = f ()
-    member this.Combine (a, b) = 
+    member inline _.Bind (m, f) = m |> Option.bind f
+    member _.Zero () = None
+    member _.Yield v = Some v
+    member _.YieldFrom v = v
+    member _.Return v = Some v
+    member _.ReturnFrom (v: _ option) = v
+    member _.Delay f = f 
+    member _.Run f = f ()
+    member _.Combine (a, b) = 
         match a,b with
         | Some a, Some b -> Some (a, b)
         | _ -> None
@@ -187,9 +187,9 @@ let inline parseLoop f =
                 loop state (count - 1us) (result :: xs)
             | None -> None
 
-    fun x -> 
+    fun state -> 
         option {
-            let! { Result = count; State = state } = u2 x
+            let! { Result = count; State = state } = u2 state
             return! loop state count [] }
 
 let parseLoopU4 f = 
@@ -204,9 +204,8 @@ let parseLoopU4 f =
                 loop state destPosition (result :: xs)
             | None -> None
 
-    fun x -> 
-        option {
-            let! { Result = count; State = state } = u4 x
+    fun state -> option {
+            let! { Result = count; State = state } = u4 state
             return! loop state (state.Pos + int count) [] }
 
 let pInterfaces = parseLoop (u2 =~ ClassInfo)
@@ -260,13 +259,10 @@ let indexedChoice' (indexParser:uint8 Parse) (parsers:(uint8 * Parse<_>) list) =
     fun state ->
         option {
             let! index = indexParser state
-            return! 
-                match parsersMap.TryGetValue index.Result with
-                | true, parser -> parser index.State
-                | false, _ -> 
-                    failwithf "Unknown ops 0x%x (%d)" index.Result index.Result
-                    //res (state ++ 1) (Higher.OpsCode.Unknown index.Result)
-        }
+            return! match parsersMap.TryGetValue index.Result with
+                    | true, parser -> parser index.State
+                    | false, _ -> 
+                        failwithf "Unknown ops 0x%x (%d)" index.Result index.Result }
 let getArrayType = function
 | 4uy -> ArrayType.T_BOOLEAN
 | 5uy -> ArrayType.T_CHAR
