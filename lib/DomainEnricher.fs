@@ -5,21 +5,64 @@ open Domain.Higher
 open System.Buffers.Binary
 open DomainCommonFunctions
 
-let rec getFieldDescriptor (s:ReadOnlySpan<_>) =
+
+
+let rec getDescriptor (s:ReadOnlySpan<_>) =
     match s.[0] with
-    | 'B' -> FieldDescriptor.Byte
-    | 'C' -> FieldDescriptor.Char
-    | 'D' -> FieldDescriptor.Double
-    | 'F' -> FieldDescriptor.Float
-    | 'I' -> FieldDescriptor.Integer
-    | 'J' -> FieldDescriptor.Long
-    | 'L' when s.[s.Length - 1] = ';' ->  String (s.Slice (1, s.Length - 2)) |> ClassName |> FieldDescriptor.Reference 
-    | 'S' -> FieldDescriptor.Short
-    | 'Z' -> FieldDescriptor.Boolean
+    | 'B' -> FieldDescriptor.Byte |> Some
+    | 'C' -> FieldDescriptor.Char |> Some
+    | 'D' -> FieldDescriptor.Double |> Some
+    | 'F' -> FieldDescriptor.Float |> Some
+    | 'I' -> FieldDescriptor.Integer |> Some
+    | 'J' -> FieldDescriptor.Long |> Some
+    | 'L' when s.[s.Length - 1] = ';' ->  String (s.Slice (1, s.Length - 2)) |> ClassName |> FieldDescriptor.Reference  |> Some
+    | 'S' -> FieldDescriptor.Short |> Some
+    | 'Z' -> FieldDescriptor.Boolean |> Some
     | '[' -> 
         let slice  = s.Slice 1
-        getFieldDescriptor slice |> FieldDescriptor.Array
-    | _ -> failwithf "Unknown recognise field descriptor: '%s'" (String s)
+        getDescriptor slice |> Option.map FieldDescriptor.Array
+    | _ -> None
+
+let rec private find a pos (x:ReadOnlySpan<_>) =
+    if x.Length <= pos then None
+    elif Set.contains x.[pos] a then Some pos
+    else find a (pos + 1) x
+
+
+let rec getFieldDescriptor (s:ReadOnlySpan<_>) =
+    match getDescriptor s with
+    | Some x -> x
+    | None -> failwithf "Unrecognised field descriptor '%s'" (String s)
+
+let rec private getMethodDescriptor' acc (s:ReadOnlySpan<_>) =
+        match s.[0] with
+        | ')' -> 
+            let slice  = s.Slice 1
+            let returnDesc = getDescriptor slice
+            { ParameterDescriptors = List.rev acc; ReturnDescriptor = returnDesc }
+        | ',' -> 
+            let slice  = s.Slice 1
+            getMethodDescriptor' acc slice
+        | _ -> 
+            let next = 
+                match find (Set [')'; ',']) 0 s with
+                | Some x -> x
+                | None -> failwithf "Unrecognised paramsDescriptor '%s' #0" (String s)
+            let paramS = s.Slice (0, next)
+            let p = 
+                match getDescriptor paramS with
+                | Some x -> x 
+                | None -> failwithf "Unrecognised paramsDescriptor '%s' #1" (String paramS)
+
+            getMethodDescriptor' (p::acc) (s.Slice next)
+
+let getMethodDescriptor (s:ReadOnlySpan<_>) =
+    match s.[0] with
+    | '(' -> 
+        let slice  = s.Slice 1
+        getMethodDescriptor' [] slice
+    | _ -> failwithf "Unknown methodDescriptor '%s'" (String s)
+    
 
 let rec getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
     let getAttributeConst (info:ReadOnlyMemory<byte>) = 
@@ -46,7 +89,7 @@ let rec getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
 
 
 let transform (classFile : Lower.ClassFile) : ClassFile =
-
+    
     let getFieldInfo (fieldInfo:Lower.FieldInfo) =
         {
             FieldInfo.AccessFlags = fieldInfo.AccessFlags
@@ -60,7 +103,7 @@ let transform (classFile : Lower.ClassFile) : ClassFile =
         {
             MethodInfo.AccessFlags = methodInfo.AccessFlags
             Name = getUtf8 classFile methodInfo.NameIndex
-            Descriptor = getUtf8 classFile methodInfo.DescriptorIndex
+            Descriptor = getUtf8 classFile methodInfo.DescriptorIndex  |> fun s -> let span = s.AsSpan () in getMethodDescriptor (span)
             Attributes = methodInfo.AttributeInfo |> List.map (getAttribute classFile)
         }
     {

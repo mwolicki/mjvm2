@@ -175,6 +175,12 @@ module Higher =
     /// [	reference	one array dimension
     | Array of FieldDescriptor
 
+    [<Struct>]
+    type MethodDescriptor = {
+        ParameterDescriptors : FieldDescriptor list
+        ReturnDescriptor : FieldDescriptor option
+    }
+
     [<RequireQualifiedAccess>]
     type AttributeConst =
     /// int, short, char, byte, boolean	CONSTANT_Integer
@@ -271,7 +277,7 @@ module Higher =
     type MethodInfo = {
         AccessFlags : AccessFlag
         Name : string
-        Descriptor : string
+        Descriptor : MethodDescriptor
         Attributes : AttributeInfo list
      }
 
