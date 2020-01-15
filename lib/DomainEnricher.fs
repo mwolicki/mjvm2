@@ -21,7 +21,7 @@ let rec getFieldDescriptor (s:ReadOnlySpan<_>) =
         getFieldDescriptor slice |> FieldDescriptor.Array
     | _ -> failwithf "Unknown recognise field descriptor: '%s'" (String s)
 
-let getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
+let rec getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
     let getAttributeConst (info:ReadOnlyMemory<byte>) = 
         let index = BinaryPrimitives.ReadUInt16BigEndian info.Span
         match classFile.ConstantPool.TryGetValue index with
@@ -40,7 +40,8 @@ let getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
         BinaryPrimitives.ReadUInt16BigEndian ai.Info.Span
         |> Lower.Utf8Index |> getUtf8 classFile |> SourceFile
     | "Code" ->
-        Parser.parseCode ai.Info |> Code
+        Parser.parseCode (List.map (getAttribute classFile))  ai.Info |> Code
+    | "LineNumberTable" -> Parser.pLineNumber ai.Info |> LineNumberTable
     | _ -> Unsupported {| Name = name; Info = ai.Info |}
 
 

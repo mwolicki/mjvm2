@@ -352,14 +352,22 @@ let pExceptionEntry =
         CatchType = catchType
     }
 
-let parseCode = 
+let pLineNumberAttr = u2 .=>. u2 =~ fun (startPc, lineNum) -> { LineNumber = lineNum; StartPc = startPc }
+
+let pLineNumber = 
+    let p = parseLoop pLineNumberAttr
+    fun data ->
+        State.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse line number table attribute."
+
+let parseCode getAttribute = 
     
     let pCode = parseLoopU4 pOpsCode
-    let p = (u2 .=>. u2 .=>. pCode .=>. (parseLoop pExceptionEntry) =~ fun (((maxStack, maxLocals), code), exceptionEntry) -> {
+    let p = (u2 .=>. u2 .=>. pCode .=>. (parseLoop pExceptionEntry) .=>. pAttributes =~ fun ((((maxStack, maxLocals), code), exceptionEntry), attributes) -> {
         Higher.CodeAttribute.MaxStack = maxStack
         Higher.CodeAttribute.MaxLocals = maxLocals
         Higher.CodeAttribute.Code = code
         Higher.CodeAttribute.ExceptionTable = exceptionEntry
+        Higher.CodeAttribute.Attributes = getAttribute attributes
     })
     fun data ->
     State.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."

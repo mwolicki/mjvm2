@@ -245,16 +245,20 @@ module Higher =
     | IfNull of branchReference:uint16
     | IfNonNull of branchReference:uint16
 
+    [<Struct>]
+    type LineNumberAttr = { StartPc : uint16; LineNumber : uint16 }
+
     type CodeAttribute = {
         MaxStack : uint16
         MaxLocals : uint16
         Code : OpsCode list
         ExceptionTable : ExceptionEntry list 
-        //Attributes : AttributeInfo list
+        Attributes : AttributeInfo list
     } and AttributeInfo =
     | Const of AttributeConst
     | SourceFile of string
     | Code of CodeAttribute
+    | LineNumberTable of LineNumberAttr list
     | Unsupported of {| Name : string; Info : ReadOnlyMemory<byte> |}
 
 
