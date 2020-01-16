@@ -57,6 +57,7 @@ let rec private getMethodDescriptor' acc (s:ReadOnlySpan<_>) =
             getMethodDescriptor' (p::acc) (s.Slice next)
 
 let getMethodDescriptor (s:ReadOnlySpan<_>) =
+    printfn "blah %s" (String s)
     match s.[0] with
     | '(' -> 
         let slice  = s.Slice 1
@@ -79,6 +80,9 @@ let rec getAttribute (classFile : Lower.ClassFile) (ai:Lower.AttributeInfo) =
     let name = getUtf8 classFile ai.AttributeNameIndex
     match name with
     | "ConstantValue" -> getAttributeConst ai.Info |> Const
+    | "Signature" -> 
+        BinaryPrimitives.ReadUInt16BigEndian ai.Info.Span
+        |> Lower.Utf8Index |> getUtf8 classFile |> Signature
     | "SourceFile" -> 
         BinaryPrimitives.ReadUInt16BigEndian ai.Info.Span
         |> Lower.Utf8Index |> getUtf8 classFile |> SourceFile

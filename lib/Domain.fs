@@ -244,7 +244,7 @@ module Higher =
     | InvokeStatic of uint16
     | ReturnVoid
     | GetStatic of uint16
-    | Unknown of uint8
+    | Unknown of uint8 []
     | NewArray of ArrayType
     | MultiAnewArray of index : uint16 * dimensions : byte 
     | AnewArray of uint16
@@ -265,6 +265,7 @@ module Higher =
     | SourceFile of string
     | Code of CodeAttribute
     | LineNumberTable of LineNumberAttr list
+    | Signature of string
     | Unsupported of {| Name : string; Info : ReadOnlyMemory<byte> |}
 
 

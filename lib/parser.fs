@@ -206,7 +206,8 @@ let parseLoopU4 f =
 
     fun state -> option {
             let! { Result = count; State = state } = u4 state
-            return! loop state (state.Pos + int count) [] }
+            let! state' = loop { Data = state.Data.Slice (0, int count); Pos = 0 } (int count) []
+            return { state' with State = state ++ (int count) } }
 
 let pInterfaces = parseLoop (u2 =~ ClassInfo)
 
@@ -262,7 +263,9 @@ let indexedChoice' (indexParser:uint8 Parse) (parsers:(uint8 * Parse<_>) list) =
             return! match parsersMap.TryGetValue index.Result with
                     | true, parser -> parser index.State
                     | false, _ -> 
-                        failwithf "Unknown ops 0x%x (%d)" index.Result index.Result }
+                        //failwithf "Unknown ops 0x%x (%d)" index.Result index.Result 
+                        eprintfn "Unknown ops 0x%x (%d)" index.Result index.Result 
+                        res { index.State with Pos = index.State.Pos + index.State.Data.Length } ( state.Data.ToArray () |> OpsCode.Unknown) }
 let getArrayType = function
 | 4uy -> ArrayType.T_BOOLEAN
 | 5uy -> ArrayType.T_CHAR

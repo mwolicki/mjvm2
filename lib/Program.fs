@@ -1,6 +1,8 @@
 ﻿open Parser
 
-["HelloWorld$INestedA.class"; "HelloWorld$INestedB.class"; "HelloWorld.class"; "HelloWorld$NestedA.class"; "HelloWorld$NestedB.class"; "module-info.class"]
+["HelloWorld$INestedA.class"; "HelloWorld$INestedB.class"; "HelloWorld.class"; "HelloWorld$NestedA.class"; "HelloWorld$NestedB.class"; "module-info.class"; 
+ "java/lang/String.class"
+ ]
 |> List.iter(fun fileName ->
     "/Users/kevin/_projects/java/" + fileName
     |> readFile
