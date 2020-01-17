@@ -12,14 +12,14 @@ open System.Collections.Generic
 
 [<Struct>]
 [<StructuredFormatDisplay("State = {AsArray}; Pos = {Pos}")>]
-type State = { Data : ReadOnlyMemory<byte>; Pos : int }
+type 'a State = { Data : ReadOnlyMemory<'a>; Pos : int }
 with 
     member s.Span = s.Data.Span
     member s.ReadOnlyMemorySlice len = s.Data.Slice (0, len)
     member s.AsArray = s.Span.ToArray ()
     member s.Slice len = s.Span.Slice (0, len)
     member s.Item with get i = s.Span.[i]
-    static member inline (++) (x:State, i) = { x with Data = x.Data.Slice i; Pos = x.Pos + i }
+    static member inline (++) (x:'a State, i) = { x with Data = x.Data.Slice i; Pos = x.Pos + i }
     static member init data = { Data = data; Pos = 0 }
 
 type OptionBuilder () =
@@ -41,13 +41,13 @@ type OptionBuilder () =
 let option = OptionBuilder ()
 
 [<Struct>]
-type Result<'a> = { State : State; Result : 'a }
+type Result<'a, 'data> = { State : 'data State; Result : 'a }
 
-type Parse<'b> = State -> Result<'b> option
+type Parse<'b, 'data> = 'data State -> Result<'b, 'data> option
 
-let inline (=~) (a:Parse<'a>) (f:'a->'b) = fun x -> a x |> Option.map (fun a -> { State = a.State; Result = f a.Result })
-let inline (=>.) (a:Parse<'a>) (b:Parse<'b>) : Parse<_> = fun x -> a x |> Option.map (fun a -> b a.State) |> Option.flatten
-let inline (.=>) (a:Parse<'a>) (b:Parse<'b>) : Parse<'a> = 
+let inline (=~) (a:Parse<'a, 'data>) (f:'a->'b) = fun x -> a x |> Option.map (fun a -> { State = a.State; Result = f a.Result })
+let inline (=>.) (a:Parse<'a, 'data>) (b:Parse<'b, 'data>) : Parse<_, _> = fun x -> a x |> Option.map (fun a -> b a.State) |> Option.flatten
+let inline (.=>) (a:Parse<'a, 'data>) (b:Parse<'b, 'data>) : Parse<'a, 'data> = 
     fun x -> 
         option {
             let! a = a x
@@ -55,7 +55,7 @@ let inline (.=>) (a:Parse<'a>) (b:Parse<'b>) : Parse<'a> =
             return { State = b.State; Result = a.Result }
         }
 
-let inline (.=>.) (a:Parse<'a>) (b:Parse<'b>) : Parse<('a*'b)> = 
+let inline (.=>.) (a:Parse<'a, 'data>) (b:Parse<'b, 'data>) : Parse<('a*'b), 'data> = 
     fun x -> 
         option {
             let! a = a x
@@ -68,18 +68,20 @@ let inline res state result = Some { State = state; Result = result }
 
 let inline pSingleton v state = res state v
 
-let pFloat (ms:State) = res (ms ++ 8) (BitConverter.ToDouble (ms.Slice 8))
-let pFloat32 (ms:State) = res (ms ++ 4) (BitConverter.ToSingle (ms.Slice 4))
-let u8 (ms:State) = res (ms ++ 8) (BinaryPrimitives.ReadUInt64BigEndian (ms.Slice 8))
-let u4 (ms:State) = res (ms ++ 4) (BinaryPrimitives.ReadUInt32BigEndian (ms.Slice 4))
-let u2 (ms:State) = res (ms ++ 2) (BinaryPrimitives.ReadUInt16BigEndian (ms.Slice 2))
-let u1 (ms:State) = res (ms ++ 1) ms.[0]
+type BState = byte State
 
-let i8 (ms:State) = res (ms ++ 8) (BinaryPrimitives.ReadInt64BigEndian (ms.Slice 8))
-let i4 (ms:State) = res (ms ++ 4) (BinaryPrimitives.ReadInt32BigEndian (ms.Slice 4))
-let i2 (ms:State) = res (ms ++ 2) (BinaryPrimitives.ReadInt16BigEndian (ms.Slice 2))
+let pFloat (ms:BState) = res (ms ++ 8) (BitConverter.ToDouble (ms.Slice 8))
+let pFloat32 (ms:BState) = res (ms ++ 4) (BitConverter.ToSingle (ms.Slice 4))
+let u8 (ms:BState) = res (ms ++ 8) (BinaryPrimitives.ReadUInt64BigEndian (ms.Slice 8))
+let u4 (ms:BState) = res (ms ++ 4) (BinaryPrimitives.ReadUInt32BigEndian (ms.Slice 4))
+let u2 (ms:BState) = res (ms ++ 2) (BinaryPrimitives.ReadUInt16BigEndian (ms.Slice 2))
+let u1 (ms:BState) = res (ms ++ 1) ms.[0]
 
-let choice (parsers:Parse<_> list) = 
+let i8 (ms:BState) = res (ms ++ 8) (BinaryPrimitives.ReadInt64BigEndian (ms.Slice 8))
+let i4 (ms:BState) = res (ms ++ 4) (BinaryPrimitives.ReadInt32BigEndian (ms.Slice 4))
+let i2 (ms:BState) = res (ms ++ 2) (BinaryPrimitives.ReadInt16BigEndian (ms.Slice 2))
+
+let choice (parsers:Parse<_, _> list) = 
     fun x ->
         let rec loop = function
         | [] -> None
@@ -89,7 +91,7 @@ let choice (parsers:Parse<_> list) =
             | None -> loop xs
         loop parsers
 
-let indexedChoice (indexParser:'a Parse) (parsers:('a * Parse<_>) list) = 
+let indexedChoice (indexParser:Parse<_,_>) (parsers:('a * Parse<_, _>) list) = 
     let parsersMap = parsers |> Map.ofList |> Dictionary
 
     fun state ->
@@ -101,14 +103,14 @@ let indexedChoice (indexParser:'a Parse) (parsers:('a * Parse<_>) list) =
                 | false, _ -> None
         }
 
-let inline isVal (parser : Parse<'a>) (value : 'a) =
+let inline isVal (parser : Parse<'a, _>) (value : 'a) =
     fun x -> parser x |> Option.bind(fun x-> if x.Result = value then Some x else None)
 
 
-let readFile path = File.ReadAllBytes path |> ReadOnlyMemory |> State.init
+let readFile path = File.ReadAllBytes path |> ReadOnlyMemory |> BState.init
 
 
-let inline isU1Val v = isVal u1 v
+let inline isU1Val v : Parse<byte, byte> = isVal u1 v
 
 
 let pRefKind =
@@ -121,7 +123,7 @@ let pRefKind =
 let pRefInfo = u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {ClassIndex = classIndex; NameAndTypeIndex = nameAndTypeIndex} )
 
 let pCUtf8 = 
-    let pUtf8 : Parse<String> = fun  state ->
+    let pUtf8 : Parse<String, _> = fun  state ->
         option {
             let! sizeResult = u2 state 
             let size = sizeResult.Result |> int
@@ -147,13 +149,13 @@ let pCInvokeDynamic = 18uy, u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAn
 let pCModule = 19uy, u2 =~ (Utf8Index >> CModule)
 let pCPackage = 20uy, u2 =~ (Utf8Index >> CPackage)
 
-let pConstType : Parse<ConstantType> = indexedChoice u1 [pCUtf8; pCInt; pCFloat; 
+let pConstType : Parse<ConstantType, _> = indexedChoice u1 [pCUtf8; pCInt; pCFloat; 
     pCLong; pCDouble; pCClass; pCString; pCFieldref; pCMethodType; 
     pCInterfaceMethodref; pCNameAndType; pCMethodHandle;
     pCDynamic; pCInvokeDynamic; pCModule; pCPackage]
 
 let parseConsts = 
-    let rec loop state count index xs : Result<IReadOnlyDictionary<_, _>> option =
+    let rec loop state count index xs : Result<IReadOnlyDictionary<_, _>, _> option =
         if count <= 0us then 
             res state (xs |> Map.ofList |> Dictionary :> _) 
         else 
@@ -178,7 +180,7 @@ let pThisClass = u2 =~ ClassInfo
 let pSuperClass = u2 =~ function | 0us -> None | ci -> ClassInfo ci |> Some
 
 let inline parseLoop f = 
-    let rec loop state count xs : Result<_ list> option =
+    let rec loop state count xs : Result<_ list, _> option =
         if count <= 0us then 
             res state (xs |> List.rev) 
         else 
@@ -193,7 +195,7 @@ let inline parseLoop f =
             return! loop state count [] }
 
 let parseLoopU4 f = 
-    let rec loop state destPosition xs : Result<_ list> option =
+    let rec loop state destPosition xs : Result<_ list, _> option =
         if destPosition = state.Pos then 
             res state (xs |> List.rev) 
         elif destPosition < state.Pos then 
@@ -210,6 +212,58 @@ let parseLoopU4 f =
             return { state' with State = state ++ (int count) } }
 
 let pInterfaces = parseLoop (u2 =~ ClassInfo)
+
+let pChar ch : Parse<char, char> = fun parse ->
+    if parse.[0] = ch then res (parse ++ 1) ch else None
+
+let pNotChar ch : Parse<char, char> = fun parse ->
+    let ch' = parse.[0]
+    if ch' <> ch then res (parse ++ 1) ch' else None
+
+
+let pAny (ps : Parse<'a, 'data> list) : Parse<'a, 'data> = 
+    let rec loop state = function
+    | [] -> None
+    | p :: ps ->
+        match p state with
+        | Some _ as result -> result
+        | None -> loop state ps
+    fun state -> loop state ps
+
+let pRef () =
+    let mutable f = fun _ -> failwith "pRef not init!"
+    (fun parse -> f parse), fun x -> f <- x
+
+let pAll (p : Parse<'a, _>) : Parse<'a list, _> = 
+    let rec loop acc state = 
+        match p state with
+        | Some { Result = result; State = state } -> loop (result::acc) state 
+        | None -> res state (acc |> List.rev)
+    loop []
+
+module DescriptorParser = 
+    open Higher
+    let inline pChar2 ch v = pChar ch =~ fun _ -> v
+    let pDescriptor = 
+        let (p, pSetter) = pRef ()
+        pAny [
+            pChar2 'B' FieldDescriptor.Byte
+            pChar2 'C' FieldDescriptor.Char
+            pChar2 'D' FieldDescriptor.Double
+            pChar2 'F' FieldDescriptor.Float
+            pChar2 'I' FieldDescriptor.Integer
+            pChar2 'J' FieldDescriptor.Long
+            pChar2 'S' FieldDescriptor.Short
+            pChar2 'Z' FieldDescriptor.Boolean
+            pChar 'L' =>. pAll (pNotChar ';') .=> pChar ';' =~  (List.toArray >> String >> ClassName >> FieldDescriptor.Reference)
+            pChar '[' =>. p =~ FieldDescriptor.Array
+        ] |> pSetter
+        p
+
+    let methodDescriptor = 
+        let returnDescrptor = 
+            pAny [pDescriptor =~ Some; pChar 'V' =~ fun _ -> None]
+        pChar '(' =>. pAll pDescriptor .=> pChar ')' .=>. returnDescrptor =~ fun (paramsDesc, retrunDesc) -> { ParameterDescriptors = paramsDesc; ReturnDescriptor = retrunDesc }
 
 let pAttributeInfo = 
     let parseAttributeBytes state =
@@ -236,7 +290,7 @@ let pMethods = parseLoop (pAccessFlags .=>. u2 .=>. u2 .=>. (parseLoop pAttribut
 
 let pAttributes = parseLoop pAttributeInfo
 
-let eom (state:State) = 
+let eom (state:_ State) = 
     if state.Span.IsEmpty then res state () else None
 
 let parseHeader = 
@@ -255,7 +309,7 @@ let parseHeader =
 
 open Higher
 
-let indexedChoice' (indexParser:uint8 Parse) (parsers:(uint8 * Parse<_>) list) = 
+let indexedChoice' (indexParser:Parse<uint8, _>) (parsers:(uint8 * Parse<_, _>) list) = 
     let parsersMap = parsers |> Map.ofList |> Dictionary
     fun state ->
         option {
@@ -374,3 +428,9 @@ let parseCode getAttribute =
     })
     fun data ->
     State.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
+
+
+
+let parseWrapper parser name data = 
+
+    State.init data |> parser |> function | Some { Result = result } -> result | None -> failwithf "Failed to parse %s, data: %A" name (data.ToArray())
