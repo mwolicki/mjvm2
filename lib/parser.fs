@@ -23,7 +23,6 @@ with
     static member init data = { Data = data; Pos = 0 }
 
 type OptionBuilder () =
-    //M<'T> * ('T -> M<'U>) -> M<'U>
     member inline _.Bind (m, f) = m |> Option.bind f
     member _.Zero () = None
     member _.Yield v = Some v
@@ -414,7 +413,7 @@ let pLineNumberAttr = u2 .=>. u2 =~ fun (startPc, lineNum) -> { LineNumber = lin
 let pLineNumber = 
     let p = parseLoop pLineNumberAttr
     fun data ->
-        State.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse line number table attribute."
+        State<byte>.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse line number table attribute."
 
 let parseCode getAttribute = 
     
@@ -427,10 +426,8 @@ let parseCode getAttribute =
         Higher.CodeAttribute.Attributes = getAttribute attributes
     })
     fun data ->
-    State.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
-
-
+    State<byte>.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
 
 let parseWrapper parser name data = 
 
-    State.init data |> parser |> function | Some { Result = result } -> result | None -> failwithf "Failed to parse %s, data: %A" name (data.ToArray())
+    State<byte>.init data |> parser |> function | Some { Result = result } -> result | None -> failwithf "Failed to parse %s, data: %A" name (data.ToArray())
