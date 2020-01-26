@@ -20,18 +20,18 @@ with
     member s.Slice len = s.Span.Slice (0, len)
     member s.Item with get i = s.Span.[i]
     static member inline (++) (x:'a State, i) = { x with Data = x.Data.Slice i; Pos = x.Pos + i }
-    static member init data = { Data = data; Pos = 0 }
+    static member inline Init data = { Data = data; Pos = 0 }
 
 type OptionBuilder () =
     member inline _.Bind (m, f) = m |> Option.bind f
-    member _.Zero () = None
-    member _.Yield v = Some v
-    member _.YieldFrom v = v
-    member _.Return v = Some v
-    member _.ReturnFrom (v: _ option) = v
-    member _.Delay f = f 
-    member _.Run f = f ()
-    member _.Combine (a, b) = 
+    member inline _.Zero () = None
+    member inline _.Yield v = Some v
+    member inline _.YieldFrom v = v
+    member inline _.Return v = Some v
+    member inline _.ReturnFrom (v: _ option) = v
+    member inline _.Delay f = f 
+    member inline _.Run f = f ()
+    member inline _.Combine (a, b) = 
         match a,b with
         | Some a, Some b -> Some (a, b)
         | _ -> None
@@ -69,16 +69,16 @@ let inline pSingleton v state = res state v
 
 type BState = byte State
 
-let pFloat (ms:BState) = res (ms ++ 8) (BitConverter.ToDouble (ms.Slice 8))
-let pFloat32 (ms:BState) = res (ms ++ 4) (BitConverter.ToSingle (ms.Slice 4))
-let u8 (ms:BState) = res (ms ++ 8) (BinaryPrimitives.ReadUInt64BigEndian (ms.Slice 8))
-let u4 (ms:BState) = res (ms ++ 4) (BinaryPrimitives.ReadUInt32BigEndian (ms.Slice 4))
-let u2 (ms:BState) = res (ms ++ 2) (BinaryPrimitives.ReadUInt16BigEndian (ms.Slice 2))
-let u1 (ms:BState) = res (ms ++ 1) ms.[0]
+let pFloat (ms:BState) = BitConverter.ToDouble (ms.Slice 8) |> res (ms ++ 8) 
+let pFloat32 (ms:BState) = BitConverter.ToSingle (ms.Slice 4) |> res (ms ++ 4) 
+let u8 (ms:BState) = BinaryPrimitives.ReadUInt64BigEndian (ms.Slice 8) |> res (ms ++ 8) 
+let u4 (ms:BState) = BinaryPrimitives.ReadUInt32BigEndian (ms.Slice 4) |> res (ms ++ 4) 
+let u2 (ms:BState) = BinaryPrimitives.ReadUInt16BigEndian (ms.Slice 2) |> res (ms ++ 2) 
+let u1 (ms:BState) = ms.[0] |> res (ms ++ 1) 
 
-let i8 (ms:BState) = res (ms ++ 8) (BinaryPrimitives.ReadInt64BigEndian (ms.Slice 8))
-let i4 (ms:BState) = res (ms ++ 4) (BinaryPrimitives.ReadInt32BigEndian (ms.Slice 4))
-let i2 (ms:BState) = res (ms ++ 2) (BinaryPrimitives.ReadInt16BigEndian (ms.Slice 2))
+let i8 (ms:BState) = BinaryPrimitives.ReadInt64BigEndian (ms.Slice 8) |> res (ms ++ 8) 
+let i4 (ms:BState) = BinaryPrimitives.ReadInt32BigEndian (ms.Slice 4) |> res (ms ++ 4) 
+let i2 (ms:BState) = BinaryPrimitives.ReadInt16BigEndian (ms.Slice 2) |> res (ms ++ 2) 
 
 let choice (parsers:Parse<_, _> list) = 
     fun x ->
@@ -105,12 +105,9 @@ let indexedChoice (indexParser:Parse<_,_>) (parsers:('a * Parse<_, _>) list) =
 let inline isVal (parser : Parse<'a, _>) (value : 'a) =
     fun x -> parser x |> Option.bind(fun x-> if x.Result = value then Some x else None)
 
-
-let readFile path = File.ReadAllBytes path |> ReadOnlyMemory |> BState.init
-
+let readFile path = File.ReadAllBytes path |> ReadOnlyMemory |> BState.Init
 
 let inline isU1Val v : Parse<byte, byte> = isVal u1 v
-
 
 let pRefKind =
     indexedChoice u1 [ 1uy, pSingleton GetField; 2uy, pSingleton GetStatic; 
@@ -129,29 +126,30 @@ let pCUtf8 =
             return! res (sizeResult.State ++ size) (System.Text.Encoding.UTF8.GetString (sizeResult.State.Slice size))
         }
     1uy , pUtf8 =~ CUtf8
-let pCInt = 3uy, i4 =~ CInteger
-let pCFloat = 4uy, pFloat32 =~ CFloat
-let pCLong = 5uy, i8 =~ CLong
-let pCDouble = 6uy, pFloat =~ CDouble
-let pCClass = 7uy, u2 =~ (Utf8Index >> CClass)
-let pCString = 8uy, u2 =~ (Utf8Index >> CString)
-let pCFieldref = 9uy, pRefInfo =~ CFieldref
-let pCMethodType = 10uy, pRefInfo =~ CMethodref
-let pCInterfaceMethodref = 11uy, pRefInfo =~ CInterfaceMethodref
-let pCNameAndType = 12uy, u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {NameIndex = classIndex; DescriptorIndex = Utf8Index nameAndTypeIndex} |> CNameAndType)
 
-let pCMethodHandle = 15uy, pRefKind .=>. u2 =~ (fun (refKind, refIndex) -> {ReferenceKind = refKind; ReferenceIndex = refIndex } |> CMethodHandle)
+let pConstType : Parse<ConstantType, _> =
+    let pCInt = 3uy, i4 =~ CInteger
+    let pCFloat = 4uy, pFloat32 =~ CFloat
+    let pCLong = 5uy, i8 =~ CLong
+    let pCDouble = 6uy, pFloat =~ CDouble
+    let pCClass = 7uy, u2 =~ (Utf8Index >> CClass)
+    let pCString = 8uy, u2 =~ (Utf8Index >> CString)
+    let pCFieldref = 9uy, pRefInfo =~ CFieldref
+    let pCMethodType = 10uy, pRefInfo =~ CMethodref
+    let pCInterfaceMethodref = 11uy, pRefInfo =~ CInterfaceMethodref
+    let pCNameAndType = 12uy, u2 .=>. u2 =~ (fun (classIndex, nameAndTypeIndex) -> {NameIndex = classIndex; DescriptorIndex = Utf8Index nameAndTypeIndex} |> CNameAndType)
 
-let pCDynamic = 17uy, u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CDynamic)
-let pCInvokeDynamic = 18uy, u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CInvokeDynamic)
+    let pCMethodHandle = 15uy, pRefKind .=>. u2 =~ (fun (refKind, refIndex) -> {ReferenceKind = refKind; ReferenceIndex = refIndex } |> CMethodHandle)
 
-let pCModule = 19uy, u2 =~ (Utf8Index >> CModule)
-let pCPackage = 20uy, u2 =~ (Utf8Index >> CPackage)
+    let pCDynamic = 17uy, u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CDynamic)
+    let pCInvokeDynamic = 18uy, u2 .=>. u2 =~ (fun (bootstrapMethodAttrIndex, nameAndTypeIndex) -> {BootstrapMethodAttrIndex = bootstrapMethodAttrIndex; NameAndTypeIndex = nameAndTypeIndex } |> CInvokeDynamic)
 
-let pConstType : Parse<ConstantType, _> = indexedChoice u1 [pCUtf8; pCInt; pCFloat; 
-    pCLong; pCDouble; pCClass; pCString; pCFieldref; pCMethodType; 
-    pCInterfaceMethodref; pCNameAndType; pCMethodHandle;
-    pCDynamic; pCInvokeDynamic; pCModule; pCPackage]
+    let pCModule = 19uy, u2 =~ (Utf8Index >> CModule)
+    let pCPackage = 20uy, u2 =~ (Utf8Index >> CPackage)
+    indexedChoice u1 [pCUtf8; pCInt; pCFloat; 
+        pCLong; pCDouble; pCClass; pCString; pCFieldref; pCMethodType; 
+        pCInterfaceMethodref; pCNameAndType; pCMethodHandle;
+        pCDynamic; pCInvokeDynamic; pCModule; pCPackage]
 
 let parseConsts = 
     let rec loop state count index xs : Result<IReadOnlyDictionary<_, _>, _> option =
@@ -413,7 +411,7 @@ let pLineNumberAttr = u2 .=>. u2 =~ fun (startPc, lineNum) -> { LineNumber = lin
 let pLineNumber = 
     let p = parseLoop pLineNumberAttr
     fun data ->
-        State<byte>.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse line number table attribute."
+        BState.Init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse line number table attribute."
 
 let parseCode getAttribute = 
     
@@ -426,8 +424,8 @@ let parseCode getAttribute =
         Higher.CodeAttribute.Attributes = getAttribute attributes
     })
     fun data ->
-    State<byte>.init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
+    BState.Init data |> p |> function | Some { Result = result } -> result | None -> failwith "Failed to parse code attribute."
 
 let parseWrapper parser name data = 
 
-    State<byte>.init data |> parser |> function | Some { Result = result } -> result | None -> failwithf "Failed to parse %s, data: %A" name (data.ToArray())
+    BState.Init data |> parser |> function | Some { Result = result } -> result | None -> failwithf "Failed to parse %s, data: %A" name (data.ToArray())
